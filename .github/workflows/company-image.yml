@@ -29,7 +29,7 @@ jobs:
           go-version-file: go.mod
       - uses: actions/setup-node@v6
         with:
-          node-version: '22'
+          node-version: '24.21.0'
       - name: Install contract generators
         run: |
           set -euo pipefail
@@ -40,6 +40,7 @@ jobs:
           set -euo pipefail
           export PATH="$HOME/go/bin:$PATH"
           corepack enable
+          corepack install --global pnpm@12.4.2
           pnpm --dir web install --frozen-lockfile
           node tools/generate.mjs --check
           go test ./internal/cpaevent -count=1
