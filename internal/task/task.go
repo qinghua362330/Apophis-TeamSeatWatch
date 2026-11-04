@@ -484,6 +484,12 @@ func (s *Store) claim(ctx context.Context, worker string, duration time.Duration
 	if err != nil {
 		return Task{}, err
 	}
+	// Retention cleanup has no workspace scope. Its terminal path records the
+	// dedicated retention.cleanup_completed audit event after the cleanup
+	// transaction succeeds or fails.
+	if taskType == "retention_cleanup" {
+		return result, tx.Commit(ctx)
+	}
 	startStage := "before_platform_request"
 	event, scope := audit.TaskStarted, result.WorkspaceID
 	if taskType == "workspace_fact_cleanup" {

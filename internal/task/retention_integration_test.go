@@ -7,7 +7,9 @@ import (
 	"database/sql"
 	"os"
 	"testing"
+	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/xft0202/Apophis-TeamSeatWatch/internal/migrations"
@@ -52,5 +54,24 @@ func TestEnqueueRetentionCleanupUsesTypedCycleKeyAndIsIdempotent(t *testing.T) {
 	}
 	if dedupe != "retention-cleanup:2026-11-04T03:55" || correlation != dedupe || cycle != dedupe {
 		t.Fatalf("unexpected retention task: dedupe=%q correlation=%q cycle=%q", dedupe, correlation, cycle)
+	}
+
+	item, err := store.ClaimRetentionCleanup(ctx, "retention-test-worker", time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = store.CompleteRetentionCleanup(ctx, item, func(context.Context, pgx.Tx) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	var status string
+	var auditCount int
+	if err = pool.QueryRow(ctx, `SELECT status FROM tsw_tasks WHERE id=$1`, item.ID).Scan(&status); err != nil {
+		t.Fatal(err)
+	}
+	if err = pool.QueryRow(ctx, `SELECT count(*) FROM tsw_audit_events WHERE event_type='retention.cleanup_completed' AND entity_id=$1`, item.ID).Scan(&auditCount); err != nil {
+		t.Fatal(err)
+	}
+	if status != "succeeded" || auditCount != 1 {
+		t.Fatalf("retention completion: status=%q audit_count=%d", status, auditCount)
 	}
 }
