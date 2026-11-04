@@ -20,6 +20,11 @@ type ReaderFactory func(*http.Client, platform.Credentials) (platform.Reader, er
 type TargetProberFactory func(*http.Client, platform.Credentials) (*platform.HTTPReader, error)
 type JoinerFactory func(context.Context, *http.Client, JoinTarget) (platform.Joiner, error)
 type RemoverFactory func(*http.Client, platform.Credentials) (platform.Remover, error)
+
+// OperationRemoverFactory builds a remover from the durable operation target.
+// Unlike the legacy factory it does not expose owner passwords; implementations
+// can revalidate the selected Workspace authority before each mutation.
+type OperationRemoverFactory func(context.Context, *http.Client, RemovalTarget) (platform.Remover, error)
 type DeliveryAdapterFactory func(*http.Client, platform.Credentials) (platform.DeliveryAdapter, error)
 type DeliveryProbeFactory func(*http.Client) (platform.DeliveryAdapter, error)
 type DeliveryRefreshFunc func(context.Context, *http.Client, string) (platform.DeliveryCredentialSet, error)
@@ -30,18 +35,19 @@ type Worker struct {
 	Targets *targetdomain.Service
 	// Egress is the narrow lease boundary; the Owner can swap the pool at
 	// runtime behind this interface without re-wiring the worker.
-	Egress          egress.LeaseProvider
-	Reader          ReaderFactory
-	TargetProber    TargetProberFactory
-	PersonalProber  PersonalProbeProvider
-	Joiner          JoinerFactory
-	Remover         RemoverFactory
-	DeliveryAdapter DeliveryAdapterFactory
-	DeliveryProbe   DeliveryProbeFactory
-	DeliveryRefresh DeliveryRefreshFunc
-	ID              string
-	LeaseTime       time.Duration
-	lastCleanup     time.Time
+	Egress           egress.LeaseProvider
+	Reader           ReaderFactory
+	TargetProber     TargetProberFactory
+	PersonalProber   PersonalProbeProvider
+	Joiner           JoinerFactory
+	Remover          RemoverFactory
+	OperationRemover OperationRemoverFactory
+	DeliveryAdapter  DeliveryAdapterFactory
+	DeliveryProbe    DeliveryProbeFactory
+	DeliveryRefresh  DeliveryRefreshFunc
+	ID               string
+	LeaseTime        time.Duration
+	lastCleanup      time.Time
 }
 
 // RunOnce reuses the Ticket 04 durable queue, lease fence, egress lease and

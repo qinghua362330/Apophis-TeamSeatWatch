@@ -97,7 +97,7 @@ func (h *OwnerAuthHandler) VerifySelectedWorkspace(w http.ResponseWriter, r *htt
 	var activeUntil *time.Time
 	var seats, members, invites *int
 	permission, completeness := facts.Permission, string(facts.Result.Completeness)
-	if permission != "read" && permission != "denied" {
+	if permission != "read" && permission != "manage" && permission != "denied" {
 		permission = "unknown"
 	}
 	if completeness != "complete" && completeness != "partial" {
@@ -109,7 +109,7 @@ func (h *OwnerAuthHandler) VerifySelectedWorkspace(w http.ResponseWriter, r *htt
 			status, observedAt, permission, completeness = "failed", time.Now().UTC(), "unknown", "unknown"
 		} else if permission == "denied" || facts.Result.Outcome == platform.OutcomeForbidden || facts.Result.Outcome == platform.OutcomeUnauthorized {
 			status, permission = "permission_denied", "denied"
-		} else if permission == "read" && facts.Result.Outcome == platform.OutcomeOperational && completeness == "complete" &&
+		} else if (permission == "read" || permission == "manage") && facts.Result.Outcome == platform.OutcomeOperational && completeness == "complete" &&
 			facts.Result.ActiveUntil != nil && facts.Result.SeatLimit != nil && facts.Result.MemberCount != nil && facts.Result.PendingInviteCount != nil &&
 			*facts.Result.SeatLimit >= 0 && *facts.Result.MemberCount >= 0 && *facts.Result.PendingInviteCount >= 0 &&
 			validSelectedEntries(facts.Result.Members, *facts.Result.MemberCount, *facts.Result.PendingInviteCount) {
@@ -139,6 +139,142 @@ func (h *OwnerAuthHandler) VerifySelectedWorkspace(w http.ResponseWriter, r *htt
 		return
 	}
 	writeJSON(w, http.StatusOK, response)
+}
+
+// refreshCPAEvidenceOnce claims one parked CPA case and runs the same selected
+// workspace verification used by the Owner endpoint. It deliberately bypasses
+// the generic workspace_read task: that task publishes ordinary read facts and
+// cannot establish the owner/manage evidence required before member removal.
+func (h *OwnerAuthHandler) refreshCPAEvidenceOnce(ctx context.Context) (bool, error) {
+	tx, err := h.pool.Begin(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback(ctx)
+	var caseID, workspaceID, motherID string
+	var locked bool
+	if err = tx.QueryRow(ctx, `SELECT pg_try_advisory_xact_lock(hashtext('tsw:cpa-evidence-refresh'))`).Scan(&locked); err != nil || !locked {
+		return false, errOrCommit(ctx, tx, err)
+	}
+	err = tx.QueryRow(ctx, `WITH candidates AS (
+		SELECT rotation.id::text AS case_id,rotation.workspace_id::text,binding.mother_account_id::text,
+			rotation.next_attempt_at AS priority
+		FROM tsw_cpa_rotation_cases rotation
+		JOIN tsw_batches batch ON batch.id=rotation.source_batch_id
+		JOIN tsw_mother_workspace_bindings binding ON binding.id=batch.binding_id AND binding.ended_at IS NULL
+		WHERE rotation.status='waiting_evidence' AND rotation.next_attempt_at<=now()
+		UNION ALL
+		SELECT NULL::text AS case_id,token.workspace_id::text,token.mother_account_id::text,
+			event.received_at AS priority
+		FROM tsw_cpa_degradation_events event
+		JOIN tsw_selected_workspace_tokens token ON true
+		JOIN tsw_mother_accounts account ON account.id=token.mother_account_id AND account.status='active'
+		JOIN tsw_mother_workspace_visibility visibility ON visibility.workspace_id=token.workspace_id
+			AND visibility.mother_account_id=token.mother_account_id
+			AND visibility.run_id=token.discovery_run_id AND visibility.access_status='readable'
+		WHERE token.status IN ('ready','failed','permission_denied','exchanging')
+			AND event.mapping_status IN ('not_found','received') AND event.received_at>now()-interval '30 minutes'
+	), ranked AS (
+		SELECT DISTINCT ON (workspace_id,mother_account_id) case_id,workspace_id,mother_account_id,priority
+		FROM candidates
+		WHERE NOT EXISTS (
+			SELECT 1 FROM tsw_workspace_verifications verification
+			WHERE verification.workspace_id=candidates.workspace_id::uuid
+			  AND verification.mother_account_id=candidates.mother_account_id::uuid
+			  AND verification.observed_at>now()-interval '2 minutes'
+		)
+		ORDER BY workspace_id,mother_account_id,priority
+	)
+	SELECT COALESCE(case_id,''),workspace_id,mother_account_id FROM ranked ORDER BY priority LIMIT 1`).Scan(&caseID, &workspaceID, &motherID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, tx.Commit(ctx)
+	}
+	if err != nil {
+		return false, err
+	}
+	if caseID != "" {
+		if _, err = tx.Exec(ctx, `UPDATE tsw_cpa_rotation_cases SET next_attempt_at=now()+interval '2 minutes',last_error_code='evidence_refresh_running',updated_at=now(),version=version+1 WHERE id=$1`, caseID); err != nil {
+			return false, err
+		}
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return false, err
+	}
+	refreshErr := h.verifySelectedWorkspaceForCPA(ctx, uuid.MustParse(workspaceID), uuid.MustParse(motherID))
+	if refreshErr != nil && caseID != "" {
+		_, updateErr := h.pool.Exec(ctx, `UPDATE tsw_cpa_rotation_cases SET next_attempt_at=now()+interval '2 minutes',last_error_code='evidence_refresh_failed',updated_at=now(),version=version+1 WHERE id=$1 AND status='waiting_evidence'`, caseID)
+		if updateErr != nil {
+			return true, errors.Join(refreshErr, updateErr)
+		}
+	}
+	return true, refreshErr
+}
+
+func (h *OwnerAuthHandler) verifySelectedWorkspaceForCPA(ctx context.Context, workspaceID, motherID uuid.UUID) error {
+	attempt, err := h.reserveSelectedWorkspace(ctx, workspaceID, motherID)
+	if errors.Is(err, errWorkspaceTokenRequired) {
+		if refreshErr := h.exchangeWorkspaceTokenForCPA(ctx, workspaceID, motherID); refreshErr != nil {
+			return refreshErr
+		}
+		attempt, err = h.reserveSelectedWorkspace(ctx, workspaceID, motherID)
+	}
+	if err != nil {
+		return err
+	}
+	if attempt.id == 0 || h.selectedWorkspaceReader == nil {
+		return errors.New("selected workspace access is unavailable")
+	}
+	verifyCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
+	defer cancel()
+	reader := h.selectedWorkspaceReader
+	if official, ok := reader.(platform.OfficialSelectedWorkspaceReader); ok {
+		official.ResolveMemberIdentifiers = func(ctx context.Context, memberIDs []string) (map[string]string, error) {
+			return h.confirmedWorkspaceMemberIdentifiers(ctx, workspaceID, memberIDs)
+		}
+		reader = official
+	}
+	facts, readErr := reader.VerifySelectedWorkspace(verifyCtx, attempt.access, motherID.String(), attempt.platformID)
+	status, permission, completeness := "failed", "unknown", string(facts.Result.Completeness)
+	if permission = facts.Permission; permission != "read" && permission != "manage" && permission != "denied" {
+		permission = "unknown"
+	}
+	observedAt := facts.Result.ObservedAt
+	if readErr != nil {
+		status, permission, completeness, observedAt = "failed", "unknown", "unknown", time.Now().UTC()
+	} else if observedAt.IsZero() || observedAt.After(time.Now()) || observedAt.Before(time.Now().Add(-7*24*time.Hour)) {
+		observedAt, permission, completeness = time.Now().UTC(), "unknown", "unknown"
+	} else if permission == "denied" || facts.Result.Outcome == platform.OutcomeForbidden || facts.Result.Outcome == platform.OutcomeUnauthorized {
+		status, permission = "permission_denied", "denied"
+	} else if facts.Result.Outcome == platform.OutcomeOperational && facts.Result.Completeness == platform.Complete &&
+		completeness == string(platform.Complete) && facts.Result.ActiveUntil != nil && facts.Result.SeatLimit != nil && facts.Result.MemberCount != nil && facts.Result.PendingInviteCount != nil &&
+		validSelectedEntries(facts.Result.Members, *facts.Result.MemberCount, *facts.Result.PendingInviteCount) {
+		status = "verified"
+	} else if facts.Result.Outcome == platform.OutcomeOperational || facts.Result.Completeness == platform.Partial {
+		status, completeness = "partial", "partial"
+	} else {
+		permission, completeness = "unknown", "unknown"
+	}
+	return h.finishSelectedWorkspace(ctx, workspaceID, motherID, attempt, status, permission, completeness, observedAt, facts.Result.ActiveUntil, facts.Result.SeatLimit, facts.Result.MemberCount, facts.Result.PendingInviteCount, facts)
+}
+
+func (h *OwnerAuthHandler) exchangeWorkspaceTokenForCPA(ctx context.Context, workspaceID, motherID uuid.UUID) error {
+	if h.workspaceTokenExchanger == nil {
+		return errWorkspaceTokenRequired
+	}
+	attempt, err := h.reserveWorkspaceTokenExchange(ctx, workspaceID, motherID)
+	if err != nil {
+		return err
+	}
+	if attempt.binding.attempt == 0 || attempt.personal.AccessToken == "" {
+		return errWorkspaceTokenRequired
+	}
+	exchangeCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	access, exchangeErr := h.workspaceTokenExchanger.ExchangeWorkspace(exchangeCtx, attempt.personal, attempt.platformID)
+	cancel()
+	if exchangeErr == nil && !platform.ValidateWorkspaceAccess(access, attempt.platformID, time.Now()) {
+		exchangeErr = platform.ErrWorkspaceExchangeUnavailable
+	}
+	return h.finishWorkspaceTokenExchange(ctx, attempt, access, exchangeErr)
 }
 
 var errSelectedAttemptSuperseded = errors.New("selected workspace attempt superseded")
@@ -475,7 +611,7 @@ func selectedWorkspaceMotherAuthority(ctx context.Context, tx pgx.Tx, verificati
 	err := tx.QueryRow(ctx, `SELECT COALESCE(entry.role,'') FROM tsw_workspace_verifications facts
 	 JOIN tsw_workspace_verification_entries entry ON entry.verification_id=facts.id AND entry.kind='member'
 	 JOIN tsw_mother_account_credentials credential ON credential.mother_account_id=facts.mother_account_id AND credential.secret_revision=facts.secret_revision AND entry.identifier=lower(credential.login_identifier)
-	 WHERE facts.id=$1 AND facts.mother_account_id=$2 AND facts.outcome='verified' AND facts.completeness='complete' AND facts.permission='read' AND facts.expires_at>now()`, verificationID, motherID).Scan(&raw)
+		WHERE facts.id=$1 AND facts.mother_account_id=$2 AND facts.outcome='verified' AND facts.completeness='complete' AND facts.permission IN ('read','manage') AND facts.expires_at>now()`, verificationID, motherID).Scan(&raw)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "unknown", false, nil
 	}

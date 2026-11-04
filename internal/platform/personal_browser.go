@@ -13,7 +13,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/chromedp/cdproto"
@@ -106,7 +105,7 @@ func launchBrowser(ctx context.Context, source *http.Client, allowed func(*netwo
 		chromedp.Flag("use-angle", "swiftshader"), chromedp.Flag("enable-unsafe-swiftshader", true),
 		chromedp.Flag("disable-quic", true), chromedp.Flag("proxy-bypass-list", "<-loopback>"), chromedp.ProxyServer(route.URL()),
 		chromedp.ModifyCmdFunc(func(cmd *exec.Cmd) {
-			cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGKILL}
+			cmd.SysProcAttr = personalBrowserSysProcAttr()
 			cmd.Env = append(os.Environ(), profile.ProcessEnvironment())
 		}))
 	opts = append(opts, extra...)

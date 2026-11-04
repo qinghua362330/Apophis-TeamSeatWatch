@@ -14,10 +14,17 @@ func (w *Worker) runRemoval(ctx context.Context, item Task, lease *egress.Lease)
 	if err != nil {
 		return err
 	}
-	if w.Remover == nil || w.Facts == nil {
+	if (w.Remover == nil && w.OperationRemover == nil) || w.Facts == nil {
 		return w.finishRemovalBlocked(ctx, item, target, nil, "platform_configuration_invalid", "prepare")
 	}
-	remover, err := w.Remover(lease.Client(), platform.Credentials{LoginIdentifier: target.OwnerIdentifier, Password: target.OwnerPassword})
+	var remover platform.Remover
+	if w.OperationRemover != nil {
+		remover, err = w.OperationRemover(ctx, lease.Client(), target)
+	} else {
+		// Legacy callers (including isolated task tests) may still provide the
+		// password-based factory. Production wires OperationRemover instead.
+		remover, err = w.Remover(lease.Client(), platform.Credentials{LoginIdentifier: target.OwnerIdentifier, Password: target.OwnerPassword})
+	}
 	if err != nil {
 		return w.finishRemovalBlocked(ctx, item, target, nil, "platform_configuration_invalid", "prepare")
 	}

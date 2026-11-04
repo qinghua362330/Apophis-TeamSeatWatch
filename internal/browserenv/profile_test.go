@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"syscall"
 	"testing"
 	"time"
@@ -61,6 +62,9 @@ func TestProfilePersistsIdentityAndExcludesConcurrentWriters(t *testing.T) {
 }
 
 func TestProfileRecoveryKillsOnlyItsOrphanChildren(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("process recovery inspects Linux /proc; run in Linux CI")
+	}
 	e, _ := New()
 	other, _ := New()
 	owned := exec.Command("sleep", "60")

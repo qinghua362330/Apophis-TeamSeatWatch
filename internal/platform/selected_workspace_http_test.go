@@ -132,6 +132,35 @@ func TestOfficialSelectedWorkspaceReaderPagedFactsAndReadOnlyBoundary(t *testing
 	}
 }
 
+func TestOfficialSelectedWorkspaceReaderProvesOwnerManagement(t *testing.T) {
+	transport := &selectedTransport{answer: selectedOK}
+	access := selectedSession()
+	access.AccessToken = workspaceFixtureTokenWithClaims(map[string]any{
+		"https://api.openai.com/auth": map[string]any{
+			"chatgpt_account_id": "canonical-space",
+			"chatgpt_user_id":    "user-a",
+			"chatgpt_plan_type":  "team",
+			"scp":                []string{"organization.read"},
+		},
+	})
+	facts, err := readerFixture(transport).VerifySelectedWorkspace(context.Background(), access, "mother-id", "canonical-space")
+	if err != nil || facts.Permission != "manage" || facts.Result.Completeness != Complete {
+		t.Fatalf("owner identity was not bound to management evidence: facts=%+v err=%v", facts, err)
+	}
+	access.AccessToken = workspaceFixtureTokenWithClaims(map[string]any{
+		"https://api.openai.com/auth": map[string]any{
+			"chatgpt_account_id": "canonical-space",
+			"chatgpt_user_id":    "user-b",
+			"chatgpt_plan_type":  "team",
+			"scp":                []string{"organization.read"},
+		},
+	})
+	facts, err = readerFixture(&selectedTransport{answer: selectedOK}).VerifySelectedWorkspace(context.Background(), access, "mother-id", "canonical-space")
+	if err != nil || facts.Permission != "read" {
+		t.Fatalf("non-owner identity gained management evidence: facts=%+v err=%v", facts, err)
+	}
+}
+
 func TestSelectedWorkspaceEntitlementsAreSubscriptionFacts(t *testing.T) {
 	for _, scenario := range []struct {
 		name, capacity string

@@ -1805,6 +1805,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/owner/v1/cpa/rotation-cases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description Automatic rotation cases with their current stage. Validated degradation callbacks trigger rotation automatically when evidence and standby accounts are ready. */
+        get: operations["listCPARotationCases"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/owner/v1/cpa/rotation-cases/{caseId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Terminates a case that has not reached a remote CPA write or a Team mutation. A case already executing is rejected with rotation_already_started so an in-flight removal is never orphaned. */
+        post: operations["cancelCPARotationCase"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/owner/v1/cpa/degradation-events": {
         parameters: {
             query?: never;
@@ -1912,6 +1946,46 @@ export interface components {
             workspaceId?: string;
             /** Format: uuid */
             rotationCaseId?: string;
+        };
+        /** @enum {string} */
+        CPARotationCaseStatus: "pending_automation" | "waiting_evidence" | "quarantining" | "removal_queued" | "removal_running" | "removal_verified" | "waiting_replacement" | "replacement_queued" | "replacement_running" | "credentials_pending" | "delivering" | "completed" | "blocked" | "failed" | "dismissed";
+        CPARotationCase: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            eventId: string;
+            credentialId: string;
+            status: components["schemas"]["CPARotationCaseStatus"];
+            attemptCount: number;
+            lastErrorCode?: string;
+            /** Format: date-time */
+            nextAttemptAt: string;
+            /** Format: uuid */
+            membershipId?: string;
+            /** Format: uuid */
+            workspaceId?: string;
+            /** Format: uuid */
+            removalOperationId?: string;
+            /** Format: uuid */
+            replacementOperationId?: string;
+            /** Format: uuid */
+            replacementAccountId?: string;
+            /** Format: date-time */
+            completedAt?: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            version: number;
+        };
+        CPARotationCaseList: {
+            items: components["schemas"]["CPARotationCase"][];
+            page: number;
+            pageSize: number;
+            total: number;
+        };
+        CPARotationDecision: {
+            reason: string;
         };
         CPADegradationEventList: {
             items: components["schemas"]["CPADegradationEvent"][];
@@ -7548,6 +7622,60 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProxyPool"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listCPARotationCases: {
+        parameters: {
+            query?: {
+                page?: components["parameters"]["Page"];
+                page_size?: components["parameters"]["PageSize"];
+                status?: components["schemas"]["CPARotationCaseStatus"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paginated rotation cases awaiting or undergoing resolution */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CPARotationCaseList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    cancelCPARotationCase: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                caseId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CPARotationDecision"];
+            };
+        };
+        responses: {
+            /** @description Case cancelled without changing Team membership */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CPARotationCase"];
                 };
             };
             default: components["responses"]["Problem"];

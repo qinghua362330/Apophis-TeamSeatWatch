@@ -49,7 +49,7 @@ func (m *Manager) Acquire(ctx context.Context) (*Lease, error) {
 			return lease, nil
 		}
 		m.signalRefill()
-		if !errors.Is(err, ErrLeaseExhausted) || m.ActiveCount() == 0 {
+		if !errors.Is(err, errLeaseBusy) {
 			return nil, err
 		}
 		select {

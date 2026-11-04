@@ -397,7 +397,7 @@ func settleRemovalAggregate(ctx context.Context, tx pgx.Tx, operationID, batchID
 		return false, err
 	}
 	var ended bool
-	err = tx.QueryRow(ctx, `UPDATE tsw_batches SET status=CASE WHEN $2='succeeded' AND NOT EXISTS (SELECT 1 FROM tsw_batch_memberships WHERE batch_id=$1 AND state<>'removed') THEN 'ended' ELSE 'removing' END,
+	err = tx.QueryRow(ctx, `UPDATE tsw_batches SET status=CASE WHEN $2='succeeded' AND NOT EXISTS (SELECT 1 FROM tsw_batch_memberships WHERE batch_id=$1 AND state<>'removed') THEN 'ended' WHEN $2='succeeded' THEN 'serving' ELSE 'removing' END,
 		service_ended_at=CASE WHEN $2='succeeded' AND NOT EXISTS (SELECT 1 FROM tsw_batch_memberships WHERE batch_id=$1 AND state<>'removed') THEN COALESCE(service_ended_at,now()) ELSE service_ended_at END,
 		blocking_reason=CASE WHEN $2='blocked' THEN 'remove_target_unresolved' ELSE NULL END,updated_at=now(),version=version+1
 		WHERE id=$1 RETURNING status='ended'`, batchID, operationStatus).Scan(&ended)

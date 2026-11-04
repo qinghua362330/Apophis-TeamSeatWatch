@@ -3109,6 +3109,52 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ProxyPool' }
         default: { $ref: '#/components/responses/Problem' }
+  /api/owner/v1/cpa/rotation-cases:
+    get:
+      operationId: listCPARotationCases
+      description: >-
+        Automatic rotation cases with their current stage. Validated degradation
+        callbacks trigger rotation automatically when evidence and standby accounts are ready.
+      security: [{ ownerSession: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/CPARotationCaseStatus' }
+      responses:
+        '200':
+          description: Paginated rotation cases awaiting or undergoing resolution
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CPARotationCaseList' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/owner/v1/cpa/rotation-cases/{caseId}/cancel:
+    post:
+      operationId: cancelCPARotationCase
+      description: >-
+        Terminates a case that has not reached a remote CPA write or a Team
+        mutation. A case already executing is rejected with
+        rotation_already_started so an in-flight removal is never orphaned.
+      security: [{ ownerSession: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CsrfHeader' }
+        - name: caseId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CPARotationDecision' }
+      responses:
+        '200':
+          description: Case cancelled without changing Team membership
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CPARotationCase' }
+        default: { $ref: '#/components/responses/Problem' }
   /api/owner/v1/cpa/degradation-events:
     get:
       operationId: listCPADegradationEvents
@@ -3500,6 +3546,74 @@ components:
         membershipId: { type: string, format: uuid }
         workspaceId: { type: string, format: uuid }
         rotationCaseId: { type: string, format: uuid }
+    CPARotationCaseStatus:
+      type: string
+      enum:
+        - pending_automation
+        - waiting_evidence
+        - quarantining
+        - removal_queued
+        - removal_running
+        - removal_verified
+        - waiting_replacement
+        - replacement_queued
+        - replacement_running
+        - credentials_pending
+        - delivering
+        - completed
+        - blocked
+        - failed
+        - dismissed
+    CPARotationCase:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - eventId
+        - credentialId
+        - status
+        - attemptCount
+        - nextAttemptAt
+        - createdAt
+        - updatedAt
+        - version
+      properties:
+        id: { type: string, format: uuid }
+        eventId: { type: string, format: uuid }
+        credentialId: { type: string }
+        status: { $ref: '#/components/schemas/CPARotationCaseStatus' }
+        attemptCount: { type: integer, minimum: 0 }
+        lastErrorCode: { type: string }
+        nextAttemptAt: { type: string, format: date-time }
+        membershipId: { type: string, format: uuid }
+        workspaceId: { type: string, format: uuid }
+        removalOperationId: { type: string, format: uuid }
+        replacementOperationId: { type: string, format: uuid }
+        replacementAccountId: { type: string, format: uuid }
+        completedAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        version: { type: integer, minimum: 1 }
+    CPARotationCaseList:
+      type: object
+      additionalProperties: false
+      required: [items, page, pageSize, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/CPARotationCase' }
+        page: { type: integer, minimum: 1 }
+        pageSize: { type: integer, minimum: 1, maximum: 100 }
+        total: { type: integer, minimum: 0 }
+    CPARotationDecision:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
     CPADegradationEventList:
       type: object
       additionalProperties: false

@@ -276,6 +276,63 @@ func (e CPADegradationMappingStatus) Valid() bool {
 	}
 }
 
+// Defines values for CPARotationCaseStatus.
+const (
+	CPARotationCaseStatusBlocked            CPARotationCaseStatus = "blocked"
+	CPARotationCaseStatusCompleted          CPARotationCaseStatus = "completed"
+	CPARotationCaseStatusCredentialsPending CPARotationCaseStatus = "credentials_pending"
+	CPARotationCaseStatusDelivering         CPARotationCaseStatus = "delivering"
+	CPARotationCaseStatusDismissed          CPARotationCaseStatus = "dismissed"
+	CPARotationCaseStatusFailed             CPARotationCaseStatus = "failed"
+	CPARotationCaseStatusPendingAutomation  CPARotationCaseStatus = "pending_automation"
+	CPARotationCaseStatusQuarantining       CPARotationCaseStatus = "quarantining"
+	CPARotationCaseStatusRemovalQueued      CPARotationCaseStatus = "removal_queued"
+	CPARotationCaseStatusRemovalRunning     CPARotationCaseStatus = "removal_running"
+	CPARotationCaseStatusRemovalVerified    CPARotationCaseStatus = "removal_verified"
+	CPARotationCaseStatusReplacementQueued  CPARotationCaseStatus = "replacement_queued"
+	CPARotationCaseStatusReplacementRunning CPARotationCaseStatus = "replacement_running"
+	CPARotationCaseStatusWaitingEvidence    CPARotationCaseStatus = "waiting_evidence"
+	CPARotationCaseStatusWaitingReplacement CPARotationCaseStatus = "waiting_replacement"
+)
+
+// Valid indicates whether the value is a known member of the CPARotationCaseStatus enum.
+func (e CPARotationCaseStatus) Valid() bool {
+	switch e {
+	case CPARotationCaseStatusBlocked:
+		return true
+	case CPARotationCaseStatusCompleted:
+		return true
+	case CPARotationCaseStatusCredentialsPending:
+		return true
+	case CPARotationCaseStatusDelivering:
+		return true
+	case CPARotationCaseStatusDismissed:
+		return true
+	case CPARotationCaseStatusFailed:
+		return true
+	case CPARotationCaseStatusPendingAutomation:
+		return true
+	case CPARotationCaseStatusQuarantining:
+		return true
+	case CPARotationCaseStatusRemovalQueued:
+		return true
+	case CPARotationCaseStatusRemovalRunning:
+		return true
+	case CPARotationCaseStatusRemovalVerified:
+		return true
+	case CPARotationCaseStatusReplacementQueued:
+		return true
+	case CPARotationCaseStatusReplacementRunning:
+		return true
+	case CPARotationCaseStatusWaitingEvidence:
+		return true
+	case CPARotationCaseStatusWaitingReplacement:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for CardActivationStatus.
 const (
 	CardActivationStatusActive  CardActivationStatus = "active"
@@ -3538,6 +3595,42 @@ type CPADegradationEventStatus string
 // CPADegradationMappingStatus defines model for CPADegradationMappingStatus.
 type CPADegradationMappingStatus string
 
+// CPARotationCase defines model for CPARotationCase.
+type CPARotationCase struct {
+	AttemptCount           int                   `json:"attemptCount"`
+	CompletedAt            *time.Time            `json:"completedAt,omitempty"`
+	CreatedAt              time.Time             `json:"createdAt"`
+	CredentialId           string                `json:"credentialId"`
+	EventId                openapi_types.UUID    `json:"eventId"`
+	Id                     openapi_types.UUID    `json:"id"`
+	LastErrorCode          *string               `json:"lastErrorCode,omitempty"`
+	MembershipId           *openapi_types.UUID   `json:"membershipId,omitempty"`
+	NextAttemptAt          time.Time             `json:"nextAttemptAt"`
+	RemovalOperationId     *openapi_types.UUID   `json:"removalOperationId,omitempty"`
+	ReplacementAccountId   *openapi_types.UUID   `json:"replacementAccountId,omitempty"`
+	ReplacementOperationId *openapi_types.UUID   `json:"replacementOperationId,omitempty"`
+	Status                 CPARotationCaseStatus `json:"status"`
+	UpdatedAt              time.Time             `json:"updatedAt"`
+	Version                int                   `json:"version"`
+	WorkspaceId            *openapi_types.UUID   `json:"workspaceId,omitempty"`
+}
+
+// CPARotationCaseList defines model for CPARotationCaseList.
+type CPARotationCaseList struct {
+	Items    []CPARotationCase `json:"items"`
+	Page     int               `json:"page"`
+	PageSize int               `json:"pageSize"`
+	Total    int               `json:"total"`
+}
+
+// CPARotationCaseStatus defines model for CPARotationCaseStatus.
+type CPARotationCaseStatus string
+
+// CPARotationDecision defines model for CPARotationDecision.
+type CPARotationDecision struct {
+	Reason string `json:"reason"`
+}
+
 // CardActivation defines model for CardActivation.
 type CardActivation struct {
 	CardId             openapi_types.UUID   `json:"cardId"`
@@ -5728,6 +5821,18 @@ type RetryMapCPADegradationEventParams struct {
 	XCSRFToken CsrfHeader `json:"X-CSRF-Token"`
 }
 
+// ListCPARotationCasesParams defines parameters for ListCPARotationCases.
+type ListCPARotationCasesParams struct {
+	Page     *Page                  `form:"page,omitempty" json:"page,omitempty"`
+	PageSize *PageSize              `form:"page_size,omitempty" json:"page_size,omitempty"`
+	Status   *CPARotationCaseStatus `form:"status,omitempty" json:"status,omitempty"`
+}
+
+// CancelCPARotationCaseParams defines parameters for CancelCPARotationCase.
+type CancelCPARotationCaseParams struct {
+	XCSRFToken CsrfHeader `json:"X-CSRF-Token"`
+}
+
 // OpenRecoveryGateParams defines parameters for OpenRecoveryGate.
 type OpenRecoveryGateParams struct {
 	XCSRFToken CsrfHeader `json:"X-CSRF-Token"`
@@ -6347,6 +6452,9 @@ type ExportChildMaterialsJSONRequestBody = ChildMaterialsExport
 // ImportChildMaterialsJSONRequestBody defines body for ImportChildMaterials for application/json ContentType.
 type ImportChildMaterialsJSONRequestBody = ChildMaterialsImport
 
+// CancelCPARotationCaseJSONRequestBody defines body for CancelCPARotationCase for application/json ContentType.
+type CancelCPARotationCaseJSONRequestBody = CPARotationDecision
+
 // OpenRecoveryGateJSONRequestBody defines body for OpenRecoveryGate for application/json ContentType.
 type OpenRecoveryGateJSONRequestBody = OpenRecoveryGateRequest
 
@@ -6592,6 +6700,12 @@ type ServerInterface interface {
 
 	// (POST /api/owner/v1/cpa/degradation-events/{eventId}/retry-map)
 	RetryMapCPADegradationEvent(w http.ResponseWriter, r *http.Request, eventId openapi_types.UUID, params RetryMapCPADegradationEventParams)
+
+	// (GET /api/owner/v1/cpa/rotation-cases)
+	ListCPARotationCases(w http.ResponseWriter, r *http.Request, params ListCPARotationCasesParams)
+
+	// (POST /api/owner/v1/cpa/rotation-cases/{caseId}/cancel)
+	CancelCPARotationCase(w http.ResponseWriter, r *http.Request, caseId openapi_types.UUID, params CancelCPARotationCaseParams)
 
 	// (GET /api/owner/v1/csrf)
 	GetOwnerCsrf(w http.ResponseWriter, r *http.Request)
@@ -8574,6 +8688,119 @@ func (siw *ServerInterfaceWrapper) RetryMapCPADegradationEvent(w http.ResponseWr
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.RetryMapCPADegradationEvent(w, r, eventId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListCPARotationCases operation middleware
+func (siw *ServerInterfaceWrapper) ListCPARotationCases(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListCPARotationCasesParams
+
+	// ------------- Optional query parameter "page" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "page", r.URL.Query(), &params.Page, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "page"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "page_size" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "page_size", r.URL.Query(), &params.PageSize, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "page_size"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page_size", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListCPARotationCases(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CancelCPARotationCase operation middleware
+func (siw *ServerInterfaceWrapper) CancelCPARotationCase(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "caseId" -------------
+	var caseId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "caseId", r.PathValue("caseId"), &caseId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "caseId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CancelCPARotationCaseParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CsrfHeader
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = XCSRFToken
+
+	} else {
+		err := fmt.Errorf("Header parameter X-CSRF-Token is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-CSRF-Token", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CancelCPARotationCase(w, r, caseId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -14764,6 +14991,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/api/owner/v1/proxy-pool/settings", wrapper.UpdateProxyPoolSettings)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/owner/v1/proxy-pool/source/test", wrapper.TestProxySource)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/owner/v1/proxy-pool/nodes/{nodeId}/probe", wrapper.ProbeProxyNode)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/owner/v1/cpa/rotation-cases", wrapper.ListCPARotationCases)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/owner/v1/cpa/rotation-cases/{caseId}/cancel", wrapper.CancelCPARotationCase)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/owner/v1/cpa/degradation-events", wrapper.ListCPADegradationEvents)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/owner/v1/cpa/degradation-events/{eventId}", wrapper.GetCPADegradationEvent)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/owner/v1/cpa/degradation-events/{eventId}/retry-map", wrapper.RetryMapCPADegradationEvent)

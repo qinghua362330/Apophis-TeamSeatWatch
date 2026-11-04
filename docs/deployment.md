@@ -31,7 +31,9 @@ python3 deploy/manage.py start
 
 进入管理端后，先在“代理管理”选择直连或配置可用代理，再按[首页的使用流程](../README.md#workflow)准备账号、空间和批次。启动完成表示服务可用；真实账号接入结果会在操作时显示。
 
-新安装会在权限为 `600` 的 `installation/control.env` 中生成 `TSW_CPA_WEBHOOK_SECRET`。如需接收 CPA 降智检测事件，在 CPA 插件中配置接收地址 `https://你的管理域名/internal/v1/cpa/degradation-events`，并填写同一密钥。接收端只保存、映射并展示待人工审核事件，不会自动踢出席位、邀请成员或创建轮转任务。已有安装不会被更新流程自动写入密钥；需要启用时，请手动向原 `control.env` 添加一个至少 16 字符的随机密钥并重启 control 服务。
+新安装会在权限为 `600` 的 `installation/control.env` 中生成 `TSW_CPA_WEBHOOK_SECRET`。如需接收 CPA 降智检测事件，在 CPA 插件中配置接收地址 `https://你的管理域名/internal/v1/cpa/degradation-events`，并填写同一密钥。接收端校验签名，以 CPA 当前账号邮箱匹配母号下新鲜、完整的 Team 成员证据，自动接管唯一的普通 Pro 成员后，会自动执行：隔离 CPA 凭证 → 移除该成员 → 备用号补位 → 获取工作空间 OAuth 凭证 → 注册回 CPA。无需逐单批准。只有 CPA 确认注册成功才标记完成。置信度不足、成员证据过期、角色受保护或没有可用备用号时不会继续移除成员。已有安装不会被更新流程自动写入密钥；需要启用时，请手动向原 `control.env` 添加一个至少 16 字符的随机密钥并重启 control 服务。
+
+还需在 control 服务环境配置 `TSW_CPA_MANAGEMENT_URL`（CPA 管理 API 基础地址，例如 `http://127.0.0.1:8317`）和 `TSW_CPA_MANAGEMENT_KEY`（CPA 当前的管理密钥）。地址必须为 control 服务可访问的回环地址；容器内的 `127.0.0.1` 指向容器自身。未配置时轮换等待，不会踢成员。Apophis 导入的子号就是备用池，无需手工建立备用批次。系统会将材料完整且不在 CPA 当前账号或 Team active 成员中的账号纳入自动备用组，准备个人登录会话并实际探测；只有探测可用的账号才能补位。成员权限不足或证据过期时，后台刷新所选母号的专用成员验证记录，并重试近期未映射回调。管理端“凭证自动轮换”可查看每个阶段与失败原因。连续远端失败会阻断案例并触发熔断。
 
 <details>
 <summary><strong>在服务器安装，从自己的电脑打开</strong></summary>

@@ -44,6 +44,7 @@ import type { RedemptionFocus } from './redemptionRecords';
 import CardManagementView from './CardManagementView';
 import RotationManagementView from './RotationManagementView';
 import CPADegradationView from './CPADegradationView';
+import CPARotationView from './CPARotationView';
 import ProxyManagementView from './ProxyManagementView';
 import OwnerIcon from './OwnerIcon';
 import LoginDotGrid from './LoginDotGrid';
@@ -353,6 +354,7 @@ function SignedInView({
           {visited.has('redemptions') ? <Box hidden={location !== 'redemptions'}><DeliveryRecordsView active={location === 'redemptions'} focus={redemptionFocus} onClearFocus={() => setRedemptionFocus(null)} onBackToCards={() => navigate('cards')} /></Box> : null}
           {visited.has('rotation') ? <Box hidden={location !== 'rotation'}><RotationManagementView onClearBatchScope={() => setOperationRotationBatch(null)} focusBatchId={operationRotationBatch} active={location === 'rotation'} onStartNextBatch={(context) => { setStartNextBatch((value) => ({ requestId: (value?.requestId ?? 0) + 1, ...context })); navigate('operation'); }} /></Box> : null}
           {visited.has('degradation') ? <Box hidden={location !== 'degradation'}><CPADegradationView active={location === 'degradation'} /></Box> : null}
+          {visited.has('rotation-cases') ? <Box hidden={location !== 'rotation-cases'}><CPARotationView active={location === 'rotation-cases'} /></Box> : null}
           {visited.has('proxy') ? <Box hidden={location !== 'proxy'}><ProxyManagementView active={location === 'proxy'} /></Box> : null}
           {visited.has('channel-settings') ? <Box hidden={location !== 'channel-settings'}><DeliveryDestinationPanel onBack={() => navigate('cards')} /></Box> : null}
         </Box>

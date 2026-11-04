@@ -19,6 +19,7 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 	"github.com/xft0202/Apophis-TeamSeatWatch/internal/audit"
 	"github.com/xft0202/Apophis-TeamSeatWatch/internal/auth"
+	"github.com/xft0202/Apophis-TeamSeatWatch/internal/cpacred"
 	"github.com/xft0202/Apophis-TeamSeatWatch/internal/egress"
 	"github.com/xft0202/Apophis-TeamSeatWatch/internal/generated/ownerapi"
 	"github.com/xft0202/Apophis-TeamSeatWatch/internal/mothersecret"
@@ -42,6 +43,8 @@ type OwnerAuthConfig struct {
 	WorkspaceTokenExchanger platform.WorkspaceTokenExchanger
 	WorkspaceMemberRemover  platform.WorkspaceMemberRemoval
 	CPAWebhookSecret        string
+	CPAManagementURL        string
+	CPAManagementKey        string
 }
 
 // OwnerAuthHandler owns the HTTP boundary for the Ticket 03 Owner security API.
@@ -69,6 +72,9 @@ type OwnerAuthHandler struct {
 	proxyPool                  *proxyControl
 	secureCookies              bool
 	cpaWebhookSecret           []byte
+	// cpaCredentials is nil unless the deployment attaches CPA management. A nil
+	// port keeps every remote CPA step disabled rather than partially executed.
+	cpaCredentials cpaCredentialPort
 }
 
 type ownerContext struct {
@@ -107,7 +113,8 @@ var _ ownerapi.ServerInterface = (*OwnerAuthHandler)(nil)
 // OwnerControl exposes the HTTP routes and their shared scoped invitation factory.
 type OwnerControl struct {
 	http.Handler
-	Joiner task.JoinerFactory
+	Joiner           task.JoinerFactory
+	OperationRemover task.OperationRemoverFactory
 }
 
 // NewOwnerAuthHandler builds the Owner routes and their database pool.
@@ -158,7 +165,17 @@ func NewOwnerAuthHandler(config OwnerAuthConfig) (*OwnerControl, func(), error) 
 		secureCookies:           config.Origins.SecureCookies(),
 		cpaWebhookSecret:        []byte(config.CPAWebhookSecret),
 	}
+	// An unattached CPA management endpoint leaves every remote stage off rather
+	// than running half of one.
+	if credentialClient, credentialErr := cpacred.New(cpacred.Config{BaseURL: config.CPAManagementURL, APIKey: config.CPAManagementKey}); credentialErr == nil {
+		handler.cpaCredentials = credentialClient
+	} else if config.CPAManagementURL != "" || config.CPAManagementKey != "" || !errors.Is(credentialErr, cpacred.ErrNotConfigured) {
+		cancelService()
+		pool.Close()
+		return nil, func() {}, credentialErr
+	}
 	proxyDone := make(chan struct{})
+	cpaAutomationDone := make(chan struct{})
 	handler.rotationJoinEgress = func(ctx context.Context) (rotationJoinEgress, error) {
 		if handler.egress == nil {
 			return nil, platform.ErrRotationJoinUnavailable
@@ -184,6 +201,15 @@ func NewOwnerAuthHandler(config OwnerAuthConfig) (*OwnerControl, func(), error) 
 		defer close(proxyDone)
 		handler.proxyPool.loop(serviceContext)
 	}()
+	go func() {
+		defer close(cpaAutomationDone)
+		handler.runCPAAutomationLoop(serviceContext)
+	}()
+	cpaSyncDone := make(chan struct{})
+	go func() {
+		defer close(cpaSyncDone)
+		handler.runCPASyncLoop(serviceContext)
+	}()
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /internal/v1/cpa/degradation-events", handler.receiveCPADegradationEvent)
 	ownerHandler := ownerapi.HandlerWithOptions(handler, ownerapi.StdHTTPServerOptions{
@@ -202,9 +228,11 @@ func NewOwnerAuthHandler(config OwnerAuthConfig) (*OwnerControl, func(), error) 
 		w.Header().Set("Cache-Control", "no-store")
 		ownerHandler.ServeHTTP(w, r)
 	})
-	return &OwnerControl{Handler: noStore, Joiner: handler.operationJoiner}, func() {
+	return &OwnerControl{Handler: noStore, Joiner: handler.operationJoiner, OperationRemover: handler.operationRemover}, func() {
 		cancelService()
 		<-proxyDone
+		<-cpaAutomationDone
+		<-cpaSyncDone
 		pool.Close()
 	}, nil
 }

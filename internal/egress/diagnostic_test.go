@@ -206,7 +206,10 @@ func TestManagerConcurrentAdmissionAndReleaseNotification(t *testing.T) {
 		group.Add(1)
 		go func() {
 			defer group.Done()
-			waiting, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+			// The first admission performs an HTTP egress remeasurement. Keep the
+			// contention window bounded, but allow that real probe to complete on
+			// a loaded CI runner before declaring the slot unavailable.
+			waiting, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
 			defer cancel()
 			lease, err := manager.Acquire(waiting)
 			if err == nil {

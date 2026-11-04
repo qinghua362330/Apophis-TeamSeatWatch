@@ -17,4 +17,6 @@ const (
 	platformCredentialsEnv = "TSW_PLATFORM_CREDENTIALS"
 	platformBaseURLEnv     = "TSW_PLATFORM_BASE_URL"
 	cpaWebhookSecretEnv    = "TSW_CPA_WEBHOOK_SECRET"
+	cpaManagementURLEnv    = "TSW_CPA_MANAGEMENT_URL"
+	cpaManagementKeyEnv    = "TSW_CPA_MANAGEMENT_KEY"
 )

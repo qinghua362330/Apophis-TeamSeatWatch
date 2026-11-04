@@ -9,6 +9,7 @@ export const ownerPages = [
   { id: 'redemptions', label: '兑换记录' },
   { id: 'rotation', label: '轮转管理' },
   { id: 'degradation', label: '降智事件' },
+  { id: 'rotation-cases', label: '凭证据轮换' },
   { id: 'proxy', label: '代理管理' },
 ] as const;
 

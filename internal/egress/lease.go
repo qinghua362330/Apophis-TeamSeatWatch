@@ -15,6 +15,7 @@ var (
 	ErrEgressDrift    = errors.New("proxy_egress_drift")
 	ErrNodeInUse      = errors.New("proxy_node_in_use")
 	ErrSessionExpired = errors.New("proxy_session_expired")
+	errLeaseBusy      = errors.New("proxy_capacity_busy")
 )
 
 const MinimumStableWindow = 2 * time.Minute
@@ -174,7 +175,7 @@ func (m *LeaseManager) acquire(ctx context.Context, limit int) (*Lease, error) {
 		m.mu.Lock()
 		if limit > 0 && len(m.active)+m.directActive >= limit {
 			m.mu.Unlock()
-			return nil, ErrLeaseExhausted
+			return nil, errors.Join(ErrLeaseExhausted, errLeaseBusy)
 		}
 		if m.mode == ModeDirect {
 			m.directActive++

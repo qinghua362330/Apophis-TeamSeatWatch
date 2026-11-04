@@ -30,6 +30,11 @@ type ControlConfig struct {
 	TOTPKeyRingFile     string
 	OwnerOrigins        auth.OriginPolicy
 	CPAWebhookSecret    string
+	// CPAManagementURL and CPAManagementKey attach the CPA management API. Both
+	// empty keeps every remote CPA stage disabled; the webhook path still records
+	// events so an operator can review them.
+	CPAManagementURL string
+	CPAManagementKey string
 }
 
 // ControlHandlers separates the public Owner surface from private health and metrics.
@@ -89,6 +94,8 @@ func NewControlHandlers(config ControlConfig) (ControlHandlers, error) {
 		WorkspaceTokenExchanger: leasedWorkspaceTokenExchanger{egress: config.Egress},
 		WorkspaceMemberRemover:  platform.OfficialWorkspaceMemberRemover{Client: leaseClient},
 		CPAWebhookSecret:        config.CPAWebhookSecret,
+		CPAManagementURL:        config.CPAManagementURL,
+		CPAManagementKey:        config.CPAManagementKey,
 	})
 	if err != nil {
 		closeHealth()
@@ -106,7 +113,8 @@ func NewControlHandlers(config ControlConfig) (ControlHandlers, error) {
 		TargetProber: func(client *http.Client, credentials platform.Credentials) (*platform.HTTPReader, error) {
 			return platformConfig.Reader(client, credentials)
 		},
-		Joiner: ownerAuth.Joiner,
+		Joiner:           ownerAuth.Joiner,
+		OperationRemover: ownerAuth.OperationRemover,
 		Remover: func(client *http.Client, credentials platform.Credentials) (platform.Remover, error) {
 			return platformConfig.Reader(client, credentials)
 		},

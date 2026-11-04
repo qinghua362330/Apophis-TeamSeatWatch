@@ -22,6 +22,14 @@ type WorkspaceAccess struct {
 	ExpiresAt   time.Time       `json:"expiresAt"`
 }
 
+// WorkspaceAccessIdentity returns the workspace and user identities asserted by
+// the exchanged bearer. The token has already been obtained through the
+// authenticated workspace exchange; callers use this only to bind the bearer
+// subject to a freshly read member role, never as a standalone authorization.
+func WorkspaceAccessIdentity(access WorkspaceAccess) (workspaceID, subjectID string) {
+	return tokenIdentity(access.AccessToken)
+}
+
 type WorkspaceTokenExchanger interface {
 	ExchangeWorkspace(context.Context, PersonalSession, string) (WorkspaceAccess, error)
 }

@@ -14,6 +14,12 @@ SPEC.loader.exec_module(MODULE)
 
 
 def main():
+    root = SCRIPT.parent.parent
+    dockerfile = (root / 'Dockerfile').read_text()
+    assert MODULE.SHA256 == '1de8a89ea228e4a0a602fd0c13c7a324fe5f310e9b08b0c4bf37e9ed0c474fcd'
+    assert MODULE.SHA256 in dockerfile
+    assert '5b1533db3b08c9cc8f7c24e0c2e31b6202d0bb1dad880f04978d03ce9e4b3ffa' in dockerfile
+    assert 'AS browser-runtime' in dockerfile
     payload = b'qualified-browser-fixture'
     expected = hashlib.sha256(payload).hexdigest()
     with tempfile.TemporaryDirectory() as temporary:

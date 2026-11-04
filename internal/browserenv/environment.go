@@ -15,10 +15,10 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const Version = "shardx-152.0.7977.65-linux-hd520-v1"
+const Version = "shardx-156.0.8078.48-linux-hd520-v1"
 const Executable = "/opt/shardx/chrome"
-const ExecutableSHA256 = "094fa2e6205bfb3d45fe1c4e7479b1e248d088895b8285a4c9ddab48c9e1100e"
-const UserAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36"
+const ExecutableSHA256 = "5b1533db3b08c9cc8f7c24e0c2e31b6202d0bb1dad880f04978d03ce9e4b3ffa"
+const UserAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36"
 const AcceptLanguage = "en-US,en;q=0.9"
 
 //go:embed recipe.json

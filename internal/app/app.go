@@ -152,6 +152,8 @@ func runControl(ctx context.Context, getenv func(string) string, logger *slog.Lo
 		TOTPKeyRingFile:  keyRingFile,
 		OwnerOrigins:     origins,
 		CPAWebhookSecret: getenv(cpaWebhookSecretEnv),
+		CPAManagementURL: getenv(cpaManagementURLEnv),
+		CPAManagementKey: getenv(cpaManagementKeyEnv),
 	})
 	if err != nil {
 		return err

@@ -63,6 +63,8 @@ const (
 	RotationRemovalRequested       EventType = "rotation_removal.requested"
 	RotationRemovalVerified        EventType = "rotation_removal.verified"
 	RotationRemovalStopped         EventType = "rotation_removal.stopped"
+	CPARotationApproved            EventType = "cpa_rotation.approved"
+	CPARotationCancelled           EventType = "cpa_rotation.cancelled"
 	ExpiryRotationAuthorized       EventType = "expiry_rotation.authorized"
 	ExpiryRotationRevoked          EventType = "expiry_rotation.revoked"
 	RemoveOperationAuthorized      EventType = "remove.operation_authorized"
@@ -253,6 +255,17 @@ type RotationRemovalDetails struct {
 
 func (RotationRemovalDetails) auditDetails() {}
 
+// CPARotationDecisionDetails records an owner decision on one automation case.
+// It carries the decision and a bounded reason code, never credential material.
+type CPARotationDecisionDetails struct {
+	Action      string `json:"action"`
+	Result      string `json:"result"`
+	Reason      string `json:"reason"`
+	CaseVersion int64  `json:"case_version"`
+}
+
+func (CPARotationDecisionDetails) auditDetails() {}
+
 type CardRevocationDetails struct {
 	Action            string `json:"action"`
 	Result            string `json:"result"`
@@ -378,6 +391,8 @@ var registry = map[EventType]spec{
 	RotationRemovalStarted:         {ActorOwner, "rotation_removal", []Outcome{OutcomeSucceeded}, "rotation_removal", "workspace"},
 	RotationRemovalRequested:       {ActorOwner, "rotation_slot", []Outcome{OutcomeSucceeded}, "rotation_removal", "workspace"},
 	RotationRemovalVerified:        {ActorOwner, "rotation_slot", []Outcome{OutcomeSucceeded}, "rotation_removal", "workspace"},
+	CPARotationApproved:            {ActorOwner, "cpa_rotation", []Outcome{OutcomeSucceeded}, "cpa_rotation", "workspace"},
+	CPARotationCancelled:           {ActorOwner, "cpa_rotation", []Outcome{OutcomeSucceeded}, "cpa_rotation", "workspace"},
 	RotationRemovalStopped:         {ActorOwner, "rotation_removal", []Outcome{OutcomeSucceeded}, "rotation_removal", "workspace"},
 	ExpiryRotationAuthorized:       {ActorOwner, "expiry_rotation_preview", []Outcome{OutcomeSucceeded}, "expiry_rotation", "workspace"},
 	ExpiryRotationRevoked:          {ActorOwner, "expiry_rotation_preview", []Outcome{OutcomeSucceeded}, "expiry_rotation", "workspace"},
@@ -543,6 +558,11 @@ func validate(event Event) ([]byte, spec, error) {
 	case "rotation_removal":
 		value, ok := event.Details.(RotationRemovalDetails)
 		validDetails = ok && len(value.Digest) == 64 && value.LeaseEpoch >= 0
+	case "cpa_rotation":
+		value, ok := event.Details.(CPARotationDecisionDetails)
+		validDetails = ok && len(value.Reason) <= 500 && value.CaseVersion > 0 &&
+			(event.Type == CPARotationApproved && value.Action == "approved" && value.Result == "approved" ||
+				event.Type == CPARotationCancelled && value.Action == "cancelled" && value.Result == "cancelled")
 	case "expiry_rotation":
 		value, ok := event.Details.(ExpiryRotationDetails)
 		validDetails = ok && len(value.Digest) == 64 && (event.Type == ExpiryRotationAuthorized && value.Action == "authorized" || event.Type == ExpiryRotationRevoked && value.Action == "revoked")

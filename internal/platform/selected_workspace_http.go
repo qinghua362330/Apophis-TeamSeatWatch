@@ -86,6 +86,20 @@ func (r OfficialSelectedWorkspaceReader) VerifySelectedWorkspace(ctx context.Con
 	}
 	members, invites := len(memberList), len(inviteList)
 	facts.Permission = "read"
+	// A complete read is elevated to management only when the exchanged
+	// bearer subject is present in the same fresh roster as an owner/admin.
+	// Roster visibility alone never grants this; both identities must match.
+	claimedWorkspace, subjectID := WorkspaceAccessIdentity(access)
+	if claimedWorkspace == workspaceID && subjectID != "" {
+		for _, member := range memberList {
+			role := NormalizeWorkspaceRole(member.Role)
+			if (role == "owner" || role == "admin") &&
+				(member.PlatformMemberID == subjectID || member.PlatformAccountUserID == subjectID) {
+				facts.Permission = "manage"
+				break
+			}
+		}
+	}
 	facts.Result = Result{Outcome: OutcomeOperational, Completeness: Complete, ObservedAt: facts.Result.ObservedAt,
 		ActiveUntil: activeUntil, SeatLimit: paid, MemberCount: &members, PendingInviteCount: &invites,
 		SubscriptionStatus: facts.Result.SubscriptionStatus,
