@@ -75,7 +75,7 @@ jobs:
           cache-to: type=gha,mode=max
       - name: Smoke test browser runtime without credentials
         run: |
-          docker run --rm --memory=1g --cpus=1 --entrypoint /usr/bin/xvfb-run \
+          timeout 60s docker run --init --rm --memory=1g --cpus=1 --entrypoint /usr/bin/xvfb-run \
             ghcr.io/qinghua362330/apophis-teamseatwatch@${{ steps.image.outputs.digest }} \
             -a /opt/shardx/chrome --no-sandbox --headless --disable-gpu \
             --dump-dom 'data:text/html,<title>runtime-ok</title>' | grep 'runtime-ok'
