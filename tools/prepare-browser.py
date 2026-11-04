@@ -11,6 +11,7 @@ import urllib.request
 ROOT = Path(__file__).resolve().parent.parent
 URL = 'https://pub-e57a7c60f6934eb09a6600bf2fc59cdc.r2.dev/ShardX-Linux.zip'
 SHA256 = '3ead1629a1c893f248cd01ee7c9125552b2cac5c91846cb71d6cb1b24883c213'
+USER_AGENT = 'Apophis-TeamSeatWatch/1.0'
 
 
 def digest(path):
@@ -36,7 +37,8 @@ def prepare(source=None):
             except OSError:
                 shutil.copyfile(source, staged)
         else:
-            with urllib.request.urlopen(URL, timeout=60) as response, staged.open('wb') as target:
+            request = urllib.request.Request(URL, headers={'User-Agent': USER_AGENT})
+            with urllib.request.urlopen(request, timeout=60) as response, staged.open('wb') as target:
                 shutil.copyfileobj(response, target)
         if digest(staged) != SHA256:
             raise RuntimeError('Qualified browser archive checksum mismatch')

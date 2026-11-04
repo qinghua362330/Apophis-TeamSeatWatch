@@ -42,6 +42,7 @@ jobs:
           corepack enable
           corepack install --global pnpm@12.4.2
           pnpm --dir web install --frozen-lockfile
+          python3 tools/test-prepare-browser.py
           node tools/generate.mjs --check
           go test ./internal/cpaevent -count=1
           GOOS=linux GOARCH=amd64 go test -c -o /tmp/apophis-runtime.test ./internal/runtime
