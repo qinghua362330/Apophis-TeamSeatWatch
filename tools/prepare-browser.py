@@ -10,7 +10,7 @@ import urllib.request
 
 ROOT = Path(__file__).resolve().parent.parent
 URL = 'https://pub-e57a7c60f6934eb09a6600bf2fc59cdc.r2.dev/ShardX-Linux.zip'
-SHA256 = '3ead1629a1c893f248cd01ee7c9125552b2cac5c91846cb71d6cb1b24883c213'
+SHA256 = '1de8a89ea228e4a0a602fd0c13c7a324fe5f310e9b08b0c4bf37e9ed0c474fcd'
 USER_AGENT = 'Apophis-TeamSeatWatch/1.0'
 
 

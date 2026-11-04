@@ -45,6 +45,7 @@ jobs:
           python3 tools/test-prepare-browser.py
           node tools/generate.mjs --check
           go test ./internal/cpaevent -count=1
+          go test ./internal/browserenv ./internal/platform -count=1
           GOOS=linux GOARCH=amd64 go test -c -o /tmp/apophis-runtime.test ./internal/runtime
           GOOS=linux GOARCH=amd64 go vet ./...
           pnpm --dir web lint
@@ -59,6 +60,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: docker/build-push-action@v7
+        id: image
         with:
           context: .
           platforms: linux/amd64
@@ -71,3 +73,9 @@ jobs:
             org.opencontainers.image.variant=browser-runtime
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Smoke test browser runtime without credentials
+        run: |
+          docker run --rm --memory=1g --cpus=1 --entrypoint /usr/bin/xvfb-run \
+            ghcr.io/qinghua362330/apophis-teamseatwatch@${{ steps.image.outputs.digest }} \
+            -a /opt/shardx/chrome --no-sandbox --headless --disable-gpu \
+            --dump-dom 'data:text/html,<title>runtime-ok</title>' | grep 'runtime-ok'

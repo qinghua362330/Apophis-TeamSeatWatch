@@ -27,10 +27,10 @@ ENTRYPOINT ["/usr/bin/tini", "-g", "--", "/apophis-teamseatwatch"]
 FROM debian@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587 AS browser-artifact
 RUN apt-get update && apt-get install -y --no-install-recommends unzip && rm -rf /var/lib/apt/lists/*
 COPY .browser-artifacts/ShardX-Linux.zip /tmp/ShardX-Linux.zip
-RUN echo '3ead1629a1c893f248cd01ee7c9125552b2cac5c91846cb71d6cb1b24883c213  /tmp/ShardX-Linux.zip' | sha256sum -c - \
+RUN echo '1de8a89ea228e4a0a602fd0c13c7a324fe5f310e9b08b0c4bf37e9ed0c474fcd  /tmp/ShardX-Linux.zip' | sha256sum -c - \
     && unzip -q /tmp/ShardX-Linux.zip -d /opt \
     && mv /opt/ShardX-Linux /opt/shardx \
-    && echo '094fa2e6205bfb3d45fe1c4e7479b1e248d088895b8285a4c9ddab48c9e1100e  /opt/shardx/chrome' | sha256sum -c -
+    && echo '5b1533db3b08c9cc8f7c24e0c2e31b6202d0bb1dad880f04978d03ce9e4b3ffa  /opt/shardx/chrome' | sha256sum -c -
 
 FROM control-runtime
 RUN apt-get update \
@@ -40,8 +40,7 @@ RUN apt-get update \
        libatspi2.0-0 libcups2 libdbus-1-3 libexpat1 \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=browser-artifact /opt/shardx /opt/shardx
-# This checksum-qualified artifact emits one trailing space before its newline.
-RUN test "$(/opt/shardx/chrome --version)" = 'ShardX 152.0.7977.65 ' \
+RUN /opt/shardx/chrome --version | grep -Eq '^ShardX 156\.0\.8078\.48[[:space:]]*$' \
     && mkdir -p /var/lib/teamseatwatch/browser-profiles \
     && chmod 700 /var/lib/teamseatwatch/browser-profiles
 ENTRYPOINT ["/usr/bin/tini", "-g", "--", "xvfb-run", "-a", "-s", "-screen 0 1366x768x24", "/apophis-teamseatwatch"]

@@ -10,7 +10,7 @@
       "en-US",
       "en"
     ],
-    "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36",
+    "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36",
     "platform": "Linux",
     "platform_value": "Linux x86_64",
     "platform_version": "6.4.15",
@@ -21,17 +21,17 @@
   },
   "client_hints": {
     "brand": "Google Chrome",
-    "brand_version": "152",
+    "brand_version": "156",
     "platform_version": "6.4.15",
     "architecture": "x86",
     "bitness": "64",
     "mobile": false,
-    "grease_brand": "Not?A_Brand",
-    "grease_version": "24",
-    "chrome_build": 7977,
-    "chrome_patch": 65,
-    "brand_full_version": "152.0.7977.65",
-    "grease_full_version": "24.0.0.0"
+    "grease_brand": "Not:A-Brand",
+    "grease_version": "8",
+    "chrome_build": 8078,
+    "chrome_patch": 48,
+    "brand_full_version": "156.0.8078.48",
+    "grease_full_version": "8.0.0.0"
   },
   "screen": {
     "width": 1366,
