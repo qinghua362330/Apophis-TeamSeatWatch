@@ -353,7 +353,7 @@ func (s *Store) EnqueueRetentionCleanup(ctx context.Context, period string) (boo
 	}
 	result, err := s.pool.Exec(ctx, `
 		INSERT INTO tsw_tasks (task_type,dedupe_key,input_snapshot,correlation_id,max_attempts)
-		VALUES ('retention_cleanup',$1,jsonb_build_object('cycle_key',$1),$1,5)
+		VALUES ('retention_cleanup',$1::text,jsonb_build_object('cycle_key',$1::text),$1::text,5)
 		ON CONFLICT (task_type,dedupe_key) DO NOTHING`, "retention-cleanup:"+period)
 	return result.RowsAffected() == 1, err
 }
