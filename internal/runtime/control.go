@@ -29,6 +29,7 @@ type ControlConfig struct {
 	PlatformBaseURL     string
 	TOTPKeyRingFile     string
 	OwnerOrigins        auth.OriginPolicy
+	CPAWebhookSecret    string
 }
 
 // ControlHandlers separates the public Owner surface from private health and metrics.
@@ -87,6 +88,7 @@ func NewControlHandlers(config ControlConfig) (ControlHandlers, error) {
 		SelectedWorkspaceReader: platform.OfficialSelectedWorkspaceReader{Client: leaseClient},
 		WorkspaceTokenExchanger: leasedWorkspaceTokenExchanger{egress: config.Egress},
 		WorkspaceMemberRemover:  platform.OfficialWorkspaceMemberRemover{Client: leaseClient},
+		CPAWebhookSecret:        config.CPAWebhookSecret,
 	})
 	if err != nil {
 		closeHealth()
@@ -125,6 +127,7 @@ func NewControlHandlers(config ControlConfig) (ControlHandlers, error) {
 
 	public := http.NewServeMux()
 	public.Handle("/api/owner/", ownerAuth)
+	public.Handle("/internal/v1/cpa/degradation-events", ownerAuth)
 	public.Handle("/owner/", staticHandler)
 	private := http.NewServeMux()
 	private.Handle(livePath, health)

@@ -16,4 +16,5 @@ const (
 	controlServerNameEnv   = "TSW_CONTROL_SERVER_NAME"
 	platformCredentialsEnv = "TSW_PLATFORM_CREDENTIALS"
 	platformBaseURLEnv     = "TSW_PLATFORM_BASE_URL"
+	cpaWebhookSecretEnv    = "TSW_CPA_WEBHOOK_SECRET"
 )

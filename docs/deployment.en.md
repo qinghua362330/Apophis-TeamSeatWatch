@@ -31,6 +31,8 @@ Import the displayed `installation/tls/authority/ca.crt` into your browser or op
 
 After signing in, choose a direct connection or configure a working proxy in Proxy Management, then follow the [homepage workflow](../README.en.md#workflow) to prepare accounts, a workspace and a batch. Successful startup confirms service readiness; real account onboarding results appear during operations.
 
+New installations generate `TSW_CPA_WEBHOOK_SECRET` in `installation/control.env`, which is written with mode `600`. To receive CPA degradation events, configure the CPA plugin with `https://your-owner-host/internal/v1/cpa/degradation-events` and the same secret. The receiver only stores, maps and presents events for owner review; it does not remove seats, invite members or create rotation tasks. Updates do not silently add a secret to existing installations. To enable the integration there, add a random secret of at least 16 characters to the existing `control.env` and restart the control service.
+
 <details>
 <summary><strong>Install on a server and open it from your computer</strong></summary>
 

@@ -1,4 +1,4 @@
-type IconName = 'accounts' | 'workspaces' | 'batches' | 'operation' | 'cards' | 'redemptions' | 'rotation' | 'proxy' | 'search' | 'upload' | 'download' | 'refresh' | 'sun' | 'moon' | 'logout' | 'arrow-left' | 'arrow-right' | 'check' | 'clock' | 'selected' | 'lock' | 'sidebar-collapse' | 'sidebar-expand';
+type IconName = 'accounts' | 'workspaces' | 'batches' | 'operation' | 'cards' | 'redemptions' | 'rotation' | 'degradation' | 'proxy' | 'search' | 'upload' | 'download' | 'refresh' | 'sun' | 'moon' | 'logout' | 'arrow-left' | 'arrow-right' | 'check' | 'clock' | 'selected' | 'lock' | 'sidebar-collapse' | 'sidebar-expand';
 
 const paths: Record<IconName, string[]> = {
   accounts: ['M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2', 'M16 3a4 4 0 0 1 0 8', 'M22 21v-2a4 4 0 0 0-3-3.87', 'M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z'],
@@ -8,6 +8,7 @@ const paths: Record<IconName, string[]> = {
   cards: ['M4 5h16a1 1 0 0 1 1 1v4a2 2 0 0 0 0 4v4a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-4a2 2 0 0 0 0-4V6a1 1 0 0 1 1-1Z', 'M15 5v3m0 3v2m0 3v3'],
   redemptions: ['M5 3v18l3-2 4 2 4-2 3 2V3Z', 'M9 7h6', 'M9 11h6', 'M9 15h3'],
   rotation: ['M20 7a9 9 0 0 0-15-2L2 8', 'M2 3v5h5', 'M4 17a9 9 0 0 0 15 2l3-3', 'M22 21v-5h-5'],
+  degradation: ['M12 3 3 19h18Z', 'M12 9v5', 'M12 18h.01'],
   proxy: ['M4 7h16', 'M7 4v6', 'M17 4v6', 'M4 10h16v10H4Z', 'M8 14h2m4 0h2'],
   search: ['M19 19l-4-4', 'M17 10a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z'],
   upload: ['M12 16V3', 'm7 8 5-5 5 5', 'M4 16v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4'],

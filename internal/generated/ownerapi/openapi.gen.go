@@ -231,6 +231,51 @@ func (e BindingStatus) Valid() bool {
 	}
 }
 
+// Defines values for CPADegradationEventStatus.
+const (
+	Quarantined CPADegradationEventStatus = "quarantined"
+)
+
+// Valid indicates whether the value is a known member of the CPADegradationEventStatus enum.
+func (e CPADegradationEventStatus) Valid() bool {
+	switch e {
+	case Quarantined:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CPADegradationMappingStatus.
+const (
+	CPADegradationMappingStatusAmbiguous       CPADegradationMappingStatus = "ambiguous"
+	CPADegradationMappingStatusDismissed       CPADegradationMappingStatus = "dismissed"
+	CPADegradationMappingStatusMapped          CPADegradationMappingStatus = "mapped"
+	CPADegradationMappingStatusNotFound        CPADegradationMappingStatus = "not_found"
+	CPADegradationMappingStatusPendingRotation CPADegradationMappingStatus = "pending_rotation"
+	CPADegradationMappingStatusReceived        CPADegradationMappingStatus = "received"
+)
+
+// Valid indicates whether the value is a known member of the CPADegradationMappingStatus enum.
+func (e CPADegradationMappingStatus) Valid() bool {
+	switch e {
+	case CPADegradationMappingStatusAmbiguous:
+		return true
+	case CPADegradationMappingStatusDismissed:
+		return true
+	case CPADegradationMappingStatusMapped:
+		return true
+	case CPADegradationMappingStatusNotFound:
+		return true
+	case CPADegradationMappingStatusPendingRotation:
+		return true
+	case CPADegradationMappingStatusReceived:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for CardActivationStatus.
 const (
 	CardActivationStatusActive  CardActivationStatus = "active"
@@ -1892,25 +1937,25 @@ func (e RemovalDifferenceReason) Valid() bool {
 
 // Defines values for RemovalPreviewTargetState.
 const (
-	Absent         RemovalPreviewTargetState = "absent"
-	Ambiguous      RemovalPreviewTargetState = "ambiguous"
-	Present        RemovalPreviewTargetState = "present"
-	ProtectedOwner RemovalPreviewTargetState = "protected_owner"
-	Removed        RemovalPreviewTargetState = "removed"
+	RemovalPreviewTargetStateAbsent         RemovalPreviewTargetState = "absent"
+	RemovalPreviewTargetStateAmbiguous      RemovalPreviewTargetState = "ambiguous"
+	RemovalPreviewTargetStatePresent        RemovalPreviewTargetState = "present"
+	RemovalPreviewTargetStateProtectedOwner RemovalPreviewTargetState = "protected_owner"
+	RemovalPreviewTargetStateRemoved        RemovalPreviewTargetState = "removed"
 )
 
 // Valid indicates whether the value is a known member of the RemovalPreviewTargetState enum.
 func (e RemovalPreviewTargetState) Valid() bool {
 	switch e {
-	case Absent:
+	case RemovalPreviewTargetStateAbsent:
 		return true
-	case Ambiguous:
+	case RemovalPreviewTargetStateAmbiguous:
 		return true
-	case Present:
+	case RemovalPreviewTargetStatePresent:
 		return true
-	case ProtectedOwner:
+	case RemovalPreviewTargetStateProtectedOwner:
 		return true
-	case Removed:
+	case RemovalPreviewTargetStateRemoved:
 		return true
 	default:
 		return false
@@ -3454,6 +3499,44 @@ type Binding struct {
 
 // BindingStatus defines model for Binding.Status.
 type BindingStatus string
+
+// CPADegradationEvent defines model for CPADegradationEvent.
+type CPADegradationEvent struct {
+	Confidence         float32                     `json:"confidence"`
+	CredentialId       string                      `json:"credentialId"`
+	CredentialRevision string                      `json:"credentialRevision"`
+	DetectedModel      string                      `json:"detectedModel"`
+	DismissedAt        *time.Time                  `json:"dismissedAt,omitempty"`
+	Email              openapi_types.Email         `json:"email"`
+	EventId            openapi_types.UUID          `json:"eventId"`
+	EventStatus        CPADegradationEventStatus   `json:"eventStatus"`
+	ExpectedModel      string                      `json:"expectedModel"`
+	Id                 openapi_types.UUID          `json:"id"`
+	MappedAt           *time.Time                  `json:"mappedAt,omitempty"`
+	MappingMessage     string                      `json:"mappingMessage"`
+	MappingStatus      CPADegradationMappingStatus `json:"mappingStatus"`
+	MembershipId       *openapi_types.UUID         `json:"membershipId,omitempty"`
+	ObservedAt         time.Time                   `json:"observedAt"`
+	ReceivedAt         time.Time                   `json:"receivedAt"`
+	RotationCaseId     *openapi_types.UUID         `json:"rotationCaseId,omitempty"`
+	TargetAccountId    *openapi_types.UUID         `json:"targetAccountId,omitempty"`
+	UpdatedAt          time.Time                   `json:"updatedAt"`
+	WorkspaceId        *openapi_types.UUID         `json:"workspaceId,omitempty"`
+}
+
+// CPADegradationEventList defines model for CPADegradationEventList.
+type CPADegradationEventList struct {
+	Items    []CPADegradationEvent `json:"items"`
+	Page     int                   `json:"page"`
+	PageSize int                   `json:"pageSize"`
+	Total    int                   `json:"total"`
+}
+
+// CPADegradationEventStatus defines model for CPADegradationEventStatus.
+type CPADegradationEventStatus string
+
+// CPADegradationMappingStatus defines model for CPADegradationMappingStatus.
+type CPADegradationMappingStatus string
 
 // CardActivation defines model for CardActivation.
 type CardActivation struct {
@@ -5628,6 +5711,23 @@ type ImportChildMaterialsParams struct {
 	XCSRFToken CsrfHeader `json:"X-CSRF-Token"`
 }
 
+// ListCPADegradationEventsParams defines parameters for ListCPADegradationEvents.
+type ListCPADegradationEventsParams struct {
+	Page     *Page                        `form:"page,omitempty" json:"page,omitempty"`
+	PageSize *PageSize                    `form:"page_size,omitempty" json:"page_size,omitempty"`
+	Status   *CPADegradationMappingStatus `form:"status,omitempty" json:"status,omitempty"`
+}
+
+// DismissCPADegradationEventParams defines parameters for DismissCPADegradationEvent.
+type DismissCPADegradationEventParams struct {
+	XCSRFToken CsrfHeader `json:"X-CSRF-Token"`
+}
+
+// RetryMapCPADegradationEventParams defines parameters for RetryMapCPADegradationEvent.
+type RetryMapCPADegradationEventParams struct {
+	XCSRFToken CsrfHeader `json:"X-CSRF-Token"`
+}
+
 // OpenRecoveryGateParams defines parameters for OpenRecoveryGate.
 type OpenRecoveryGateParams struct {
 	XCSRFToken CsrfHeader `json:"X-CSRF-Token"`
@@ -6480,6 +6580,18 @@ type ServerInterface interface {
 
 	// (POST /api/owner/v1/child-materials/import)
 	ImportChildMaterials(w http.ResponseWriter, r *http.Request, params ImportChildMaterialsParams)
+
+	// (GET /api/owner/v1/cpa/degradation-events)
+	ListCPADegradationEvents(w http.ResponseWriter, r *http.Request, params ListCPADegradationEventsParams)
+
+	// (GET /api/owner/v1/cpa/degradation-events/{eventId})
+	GetCPADegradationEvent(w http.ResponseWriter, r *http.Request, eventId openapi_types.UUID)
+
+	// (POST /api/owner/v1/cpa/degradation-events/{eventId}/dismiss)
+	DismissCPADegradationEvent(w http.ResponseWriter, r *http.Request, eventId openapi_types.UUID, params DismissCPADegradationEventParams)
+
+	// (POST /api/owner/v1/cpa/degradation-events/{eventId}/retry-map)
+	RetryMapCPADegradationEvent(w http.ResponseWriter, r *http.Request, eventId openapi_types.UUID, params RetryMapCPADegradationEventParams)
 
 	// (GET /api/owner/v1/csrf)
 	GetOwnerCsrf(w http.ResponseWriter, r *http.Request)
@@ -8269,6 +8381,199 @@ func (siw *ServerInterfaceWrapper) ImportChildMaterials(w http.ResponseWriter, r
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ImportChildMaterials(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListCPADegradationEvents operation middleware
+func (siw *ServerInterfaceWrapper) ListCPADegradationEvents(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListCPADegradationEventsParams
+
+	// ------------- Optional query parameter "page" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "page", r.URL.Query(), &params.Page, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "page"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "page_size" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "page_size", r.URL.Query(), &params.PageSize, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "page_size"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page_size", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "status"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListCPADegradationEvents(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetCPADegradationEvent operation middleware
+func (siw *ServerInterfaceWrapper) GetCPADegradationEvent(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "eventId" -------------
+	var eventId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "eventId", r.PathValue("eventId"), &eventId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "eventId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCPADegradationEvent(w, r, eventId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DismissCPADegradationEvent operation middleware
+func (siw *ServerInterfaceWrapper) DismissCPADegradationEvent(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "eventId" -------------
+	var eventId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "eventId", r.PathValue("eventId"), &eventId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "eventId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DismissCPADegradationEventParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CsrfHeader
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = XCSRFToken
+
+	} else {
+		err := fmt.Errorf("Header parameter X-CSRF-Token is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-CSRF-Token", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DismissCPADegradationEvent(w, r, eventId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RetryMapCPADegradationEvent operation middleware
+func (siw *ServerInterfaceWrapper) RetryMapCPADegradationEvent(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "eventId" -------------
+	var eventId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "eventId", r.PathValue("eventId"), &eventId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "eventId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RetryMapCPADegradationEventParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "X-CSRF-Token" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("X-CSRF-Token")]; found {
+		var XCSRFToken CsrfHeader
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "X-CSRF-Token", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "X-CSRF-Token", valueList[0], &XCSRFToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "X-CSRF-Token", Err: err})
+			return
+		}
+
+		params.XCSRFToken = XCSRFToken
+
+	} else {
+		err := fmt.Errorf("Header parameter X-CSRF-Token is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "X-CSRF-Token", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RetryMapCPADegradationEvent(w, r, eventId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -14459,6 +14764,10 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/api/owner/v1/proxy-pool/settings", wrapper.UpdateProxyPoolSettings)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/owner/v1/proxy-pool/source/test", wrapper.TestProxySource)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/owner/v1/proxy-pool/nodes/{nodeId}/probe", wrapper.ProbeProxyNode)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/owner/v1/cpa/degradation-events", wrapper.ListCPADegradationEvents)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/api/owner/v1/cpa/degradation-events/{eventId}", wrapper.GetCPADegradationEvent)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/owner/v1/cpa/degradation-events/{eventId}/retry-map", wrapper.RetryMapCPADegradationEvent)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/owner/v1/cpa/degradation-events/{eventId}/dismiss", wrapper.DismissCPADegradationEvent)
 
 	return m
 }

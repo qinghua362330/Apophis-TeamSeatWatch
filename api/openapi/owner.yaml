@@ -3109,6 +3109,73 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ProxyPool' }
         default: { $ref: '#/components/responses/Problem' }
+  /api/owner/v1/cpa/degradation-events:
+    get:
+      operationId: listCPADegradationEvents
+      security: [{ ownerSession: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/CPADegradationMappingStatus' }
+      responses:
+        '200':
+          description: Paginated CPA degradation events awaiting owner review
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CPADegradationEventList' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/owner/v1/cpa/degradation-events/{eventId}:
+    parameters:
+      - name: eventId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      operationId: getCPADegradationEvent
+      security: [{ ownerSession: [] }]
+      responses:
+        '200':
+          description: One stored CPA degradation event
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CPADegradationEvent' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/owner/v1/cpa/degradation-events/{eventId}/retry-map:
+    post:
+      operationId: retryMapCPADegradationEvent
+      security: [{ ownerSession: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CsrfHeader' }
+        - name: eventId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Event mapping recomputed without changing Team membership
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CPADegradationEvent' }
+        default: { $ref: '#/components/responses/Problem' }
+  /api/owner/v1/cpa/degradation-events/{eventId}/dismiss:
+    post:
+      operationId: dismissCPADegradationEvent
+      security: [{ ownerSession: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CsrfHeader' }
+        - name: eventId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Event dismissed without changing Team membership
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CPADegradationEvent' }
+        default: { $ref: '#/components/responses/Problem' }
 components:
   securitySchemes:
     ownerSession:
@@ -3388,6 +3455,62 @@ components:
           schema:
             $ref: '#/components/schemas/Problem'
   schemas:
+    CPADegradationMappingStatus:
+      type: string
+      enum: [received, mapped, ambiguous, not_found, pending_rotation, dismissed]
+    CPADegradationEventStatus:
+      type: string
+      enum: [quarantined]
+    CPADegradationEvent:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - eventId
+        - credentialId
+        - credentialRevision
+        - email
+        - expectedModel
+        - detectedModel
+        - confidence
+        - observedAt
+        - eventStatus
+        - mappingStatus
+        - mappingMessage
+        - receivedAt
+        - updatedAt
+      properties:
+        id: { type: string, format: uuid }
+        eventId: { type: string, format: uuid }
+        credentialId: { type: string }
+        credentialRevision: { type: string }
+        email: { type: string, format: email }
+        expectedModel: { type: string }
+        detectedModel: { type: string }
+        confidence: { type: number, minimum: 0, maximum: 1 }
+        observedAt: { type: string, format: date-time }
+        eventStatus: { $ref: '#/components/schemas/CPADegradationEventStatus' }
+        mappingStatus: { $ref: '#/components/schemas/CPADegradationMappingStatus' }
+        mappingMessage: { type: string }
+        receivedAt: { type: string, format: date-time }
+        mappedAt: { type: string, format: date-time }
+        dismissedAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        targetAccountId: { type: string, format: uuid }
+        membershipId: { type: string, format: uuid }
+        workspaceId: { type: string, format: uuid }
+        rotationCaseId: { type: string, format: uuid }
+    CPADegradationEventList:
+      type: object
+      additionalProperties: false
+      required: [items, page, pageSize, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/CPADegradationEvent' }
+        page: { type: integer, minimum: 1 }
+        pageSize: { type: integer, minimum: 1, maximum: 100 }
+        total: { type: integer, minimum: 0 }
     OperationDraftChild:
       type: object
       additionalProperties: false

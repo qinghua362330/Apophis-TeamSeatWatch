@@ -119,10 +119,10 @@ func removalPreview(ctx context.Context, query removalQuerier, batch ownerapi.Ba
 			targetRows.Close()
 			return preview, errors.New("invalid removal target identity")
 		}
-		preview.Targets = append(preview.Targets, ownerapi.RemovalPreviewTarget{MembershipId: membershipUUID, TargetAccountId: targetUUID, DisplayLabel: displayLabel, Identifier: identifier, JoinedAt: &joinedAt, RemovedAt: removedAt, State: ownerapi.Absent})
+		preview.Targets = append(preview.Targets, ownerapi.RemovalPreviewTarget{MembershipId: membershipUUID, TargetAccountId: targetUUID, DisplayLabel: displayLabel, Identifier: identifier, JoinedAt: &joinedAt, RemovedAt: removedAt, State: ownerapi.RemovalPreviewTargetStateAbsent})
 		targetIdentifiers[strings.ToLower(strings.TrimSpace(identifier))] = true
 		if state == "removed" {
-			preview.Targets[len(preview.Targets)-1].State = ownerapi.Removed
+			preview.Targets[len(preview.Targets)-1].State = ownerapi.RemovalPreviewTargetStateRemoved
 		}
 	}
 	targetRows.Close()
@@ -212,21 +212,21 @@ func removalPreview(ctx context.Context, query removalQuerier, batch ownerapi.Ba
 		addRemovalBlocker(&preview, "workspace_owner_missing", "完整快照未确认当前管理员账号仍为 Owner")
 	}
 	for index := range preview.Targets {
-		if preview.Targets[index].State == ownerapi.Removed {
+		if preview.Targets[index].State == ownerapi.RemovalPreviewTargetStateRemoved {
 			continue
 		}
 		matches := entryByIdentifier[strings.ToLower(strings.TrimSpace(preview.Targets[index].Identifier))]
 		switch {
 		case len(matches) > 1:
-			preview.Targets[index].State = ownerapi.Ambiguous
+			preview.Targets[index].State = ownerapi.RemovalPreviewTargetStateAmbiguous
 			addRemovalBlocker(&preview, "target_identity_ambiguous", "至少一个批次关系无法唯一对应平台成员")
 		case len(matches) == 1 && removalOwnerRole(matches[0].Role):
-			preview.Targets[index].State = ownerapi.ProtectedOwner
+			preview.Targets[index].State = ownerapi.RemovalPreviewTargetStateProtectedOwner
 			addRemovalBlocker(&preview, "target_is_owner", "Owner 不能进入移除目标")
 		case len(matches) == 1:
-			preview.Targets[index].State = ownerapi.Present
+			preview.Targets[index].State = ownerapi.RemovalPreviewTargetStatePresent
 		default:
-			preview.Targets[index].State = ownerapi.Absent
+			preview.Targets[index].State = ownerapi.RemovalPreviewTargetStateAbsent
 		}
 	}
 	preview.CanProceed = len(preview.Blockers) == 0

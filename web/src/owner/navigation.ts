@@ -8,6 +8,7 @@ export const ownerPages = [
   { id: 'cards', label: '卡密管理' },
   { id: 'redemptions', label: '兑换记录' },
   { id: 'rotation', label: '轮转管理' },
+  { id: 'degradation', label: '降智事件' },
   { id: 'proxy', label: '代理管理' },
 ] as const;
 

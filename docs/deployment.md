@@ -31,6 +31,8 @@ python3 deploy/manage.py start
 
 进入管理端后，先在“代理管理”选择直连或配置可用代理，再按[首页的使用流程](../README.md#workflow)准备账号、空间和批次。启动完成表示服务可用；真实账号接入结果会在操作时显示。
 
+新安装会在权限为 `600` 的 `installation/control.env` 中生成 `TSW_CPA_WEBHOOK_SECRET`。如需接收 CPA 降智检测事件，在 CPA 插件中配置接收地址 `https://你的管理域名/internal/v1/cpa/degradation-events`，并填写同一密钥。接收端只保存、映射并展示待人工审核事件，不会自动踢出席位、邀请成员或创建轮转任务。已有安装不会被更新流程自动写入密钥；需要启用时，请手动向原 `control.env` 添加一个至少 16 字符的随机密钥并重启 control 服务。
+
 <details>
 <summary><strong>在服务器安装，从自己的电脑打开</strong></summary>
 

@@ -81,6 +81,7 @@ def initialize(data, base):
     settings = {'project': 'tsw-' + secrets.token_hex(5), 'port_base': base}
     try:
         db_password = secrets.token_hex(24)
+        cpa_webhook_secret = secrets.token_urlsafe(32)
         database = {'TSW_DATABASE_URL':
                     f'postgres://teamseatwatch:{db_password}@127.0.0.1:{base+5}/teamseatwatch?sslmode=disable',
                     'TSW_TOTP_KEYRING_FILE': '/secrets/keyring.json'}
@@ -95,6 +96,7 @@ def initialize(data, base):
                   'TSW_PRIVATE_LISTEN': f'127.0.0.1:{base+1}',
                   'TSW_OWNER_STATIC_DIR': '/app/owner',
                   'TSW_OWNER_ORIGINS': f'https://localhost:{base+3}',
+                  'TSW_CPA_WEBHOOK_SECRET': cpa_webhook_secret,
                   'TSW_TLS_CA_FILE': '/tls/ca.crt', 'TSW_TLS_CERT_FILE': '/tls/server.crt',
                   'TSW_TLS_KEY_FILE': '/tls/server.key'})
         write_env(staging, 'gateway.env', {

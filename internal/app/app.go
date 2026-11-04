@@ -148,9 +148,10 @@ func runControl(ctx context.Context, getenv func(string) string, logger *slog.Lo
 	handlers, err := runtime.NewControlHandlers(runtime.ControlConfig{
 		DatabaseURL: dsn, StaticDir: staticDir,
 		Context: ctx, PlatformClients: router, Egress: egressManager,
-		PlatformBaseURL: platformBaseURL,
-		TOTPKeyRingFile: keyRingFile,
-		OwnerOrigins:    origins,
+		PlatformBaseURL:  platformBaseURL,
+		TOTPKeyRingFile:  keyRingFile,
+		OwnerOrigins:     origins,
+		CPAWebhookSecret: getenv(cpaWebhookSecretEnv),
 	})
 	if err != nil {
 		return err

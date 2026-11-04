@@ -41,6 +41,7 @@ type OwnerAuthConfig struct {
 	SelectedWorkspaceReader platform.SelectedWorkspaceReader
 	WorkspaceTokenExchanger platform.WorkspaceTokenExchanger
 	WorkspaceMemberRemover  platform.WorkspaceMemberRemoval
+	CPAWebhookSecret        string
 }
 
 // OwnerAuthHandler owns the HTTP boundary for the Ticket 03 Owner security API.
@@ -67,6 +68,7 @@ type OwnerAuthHandler struct {
 	rotationUsageAdapters      func(platform.DiscoveryClient) platform.RotationUsageReader
 	proxyPool                  *proxyControl
 	secureCookies              bool
+	cpaWebhookSecret           []byte
 }
 
 type ownerContext struct {
@@ -154,6 +156,7 @@ func NewOwnerAuthHandler(config OwnerAuthConfig) (*OwnerControl, func(), error) 
 		workspaceTokenExchanger: config.WorkspaceTokenExchanger,
 		workspaceMemberRemover:  config.WorkspaceMemberRemover,
 		secureCookies:           config.Origins.SecureCookies(),
+		cpaWebhookSecret:        []byte(config.CPAWebhookSecret),
 	}
 	proxyDone := make(chan struct{})
 	handler.rotationJoinEgress = func(ctx context.Context) (rotationJoinEgress, error) {
@@ -182,6 +185,7 @@ func NewOwnerAuthHandler(config OwnerAuthConfig) (*OwnerControl, func(), error) 
 		handler.proxyPool.loop(serviceContext)
 	}()
 	mux := http.NewServeMux()
+	mux.HandleFunc("POST /internal/v1/cpa/degradation-events", handler.receiveCPADegradationEvent)
 	ownerHandler := ownerapi.HandlerWithOptions(handler, ownerapi.StdHTTPServerOptions{
 		BaseRouter: mux,
 		ErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
