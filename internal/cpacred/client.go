@@ -204,7 +204,6 @@ func (c *Client) List(ctx context.Context) ([]File, error) {
 			Provider           string          `json:"provider"`
 			Email              string          `json:"email"`
 			AccountID          string          `json:"account_id"`
-			Account            string          `json:"account"`
 			CredentialRevision string          `json:"credential_revision"`
 			Status             string          `json:"status"`
 			StatusMessage      string          `json:"status_message"`
@@ -231,12 +230,13 @@ func (c *Client) List(ctx context.Context) ([]File, error) {
 			continue
 		}
 		files = append(files, File{
-			Name:          name,
-			ID:            strings.TrimSpace(item.ID),
-			AuthIndex:     strings.TrimSpace(item.AuthIndex),
-			Provider:      provider,
-			Email:         strings.ToLower(strings.TrimSpace(item.Email)),
-			AccountID:     firstNonEmpty(item.AccountID, item.Account),
+			Name:      name,
+			ID:        strings.TrimSpace(item.ID),
+			AuthIndex: strings.TrimSpace(item.AuthIndex),
+			Provider:  provider,
+			Email:     strings.ToLower(strings.TrimSpace(item.Email)),
+			// CPA account is a display label (often an email), not a workspace ID.
+			AccountID:     strings.TrimSpace(item.AccountID),
 			Revision:      strings.TrimSpace(item.CredentialRevision),
 			Status:        strings.TrimSpace(item.Status),
 			StatusMessage: firstNonEmpty(item.StatusMessage, jsonErrorText(item.Error)),

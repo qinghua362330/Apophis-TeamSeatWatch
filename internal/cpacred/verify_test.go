@@ -65,3 +65,50 @@ func TestVerifyRequiresSuccessfulUpstreamAndSupportsLegacyEndpoint(t *testing.T)
 		})
 	}
 }
+
+func TestVerifyTreatsListingAccountAsDisplayLabel(t *testing.T) {
+	for _, tc := range []struct {
+		name, accountID string
+		wantOK          bool
+	}{
+		{"email display label", "", true},
+		{"explicit matching identity", "workspace-fixture", true},
+		{"explicit different identity", "different-workspace", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/v0/management/auth-files":
+					_ = json.NewEncoder(w).Encode(map[string]any{"files": []map[string]any{{"name": "acct.json", "auth_index": "idx-1", "provider": "codex", "account": "user@example.test", "account_id": tc.accountID, "disabled": false}}})
+				case "/v0/management/auth-files/download":
+					_, _ = w.Write([]byte(`{"type":"codex","account_id":"workspace-fixture","email":"user@example.test","access_token":"fixture-access","refresh_token":"fixture-refresh","id_token":"fixture-id"}`))
+				case "/v0/management/api-call":
+					calls++
+					var payload struct {
+						Header map[string]string `json:"header"`
+					}
+					_ = json.NewDecoder(r.Body).Decode(&payload)
+					if payload.Header["Chatgpt-Account-Id"] != "workspace-fixture" {
+						t.Error("verification used the display label as workspace identity")
+					}
+					_, _ = w.Write([]byte(`{"status_code":200}`))
+				default:
+					w.WriteHeader(404)
+				}
+			}))
+			defer server.Close()
+			client, err := New(Config{BaseURL: server.URL, APIKey: testKey})
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = client.Verify(t.Context(), "acct.json")
+			if (err == nil) != tc.wantOK {
+				t.Fatalf("Verify error=%v wantOK=%v", err, tc.wantOK)
+			}
+			if !tc.wantOK && calls != 0 {
+				t.Fatal("mismatched explicit identity reached upstream")
+			}
+		})
+	}
+}
