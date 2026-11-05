@@ -172,6 +172,14 @@ func (p PersonalWebRefresher) RefreshPersonal(ctx context.Context, material Moth
 	if authorization.completedAt(pageURL) {
 		return r.readPersonalSession(ctx, jar, deviceID, false, material.LoginIdentifier)
 	}
+	// A persisted browser login can finish authentication at Personal account
+	// selection. Restarting the password step here destroys the valid auth state.
+	if landing, parseErr := url.Parse(pageURL); parseErr == nil && landing.Scheme == "https" && landing.Host == "auth.openai.com" && landing.Path == "/workspace" {
+		if err := r.finishPersonalChoice(ctx, jar, pageURL); err != nil {
+			return personalRequestFailure(err), nil
+		}
+		return r.readPersonalSession(ctx, jar, deviceID, false, material.LoginIdentifier)
+	}
 	if !strings.Contains(strings.ToLower(pageURL+" "+string(page)), "log-in/password") {
 		pageURL, page, err = r.followBrowserRedirect(ctx, jar, officialAuthBase+"/log-in/password", pageURL)
 		if err != nil {
