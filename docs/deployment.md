@@ -14,7 +14,7 @@ python3 deploy/manage.py start
 
 第一次会下载构建依赖，请等待构建完成。按提示设置至少 **14 个字符**的管理员密码，输入时不回显。出现 **“已就绪 / Ready”** 后，安装完成。
 
-构建入口先把固定 SHA256 的官方 ShardX 152.0.7977.65 ZIP 缓存在源码目录 `.browser-artifacts/`，校验后解压到镜像；最终镜像仅含未修改内核。直接运行 `docker build` 前执行 `python3 tools/prepare-browser.py`；已有相同制品可用 `--source /path/to/ShardX-Linux.zip` 复用。每个账号在首次请求会话时建立独立档案，存于 control 的 `browser-profiles` 持久卷（容器内 `/var/lib/teamseatwatch/browser-profiles`），重启和重新创建容器复用此卷。空闲档案不启动浏览器。全局业务并发首次默认5，已保存的代理管理运行参数继续生效。
+构建入口复用按镜像 digest 固定的、已部署验证的 ShardX 156.0.8078.48 浏览器，并在构建时再次校验 executable SHA256 和版本；最终镜像仅含未修改内核。无需从内容可变的 ZIP 下载地址暂存浏览器。每个账号在首次请求会话时建立独立档案，存于 control 的 `browser-profiles` 持久卷（容器内 `/var/lib/teamseatwatch/browser-profiles`），重启和重新创建容器复用此卷。空闲档案不启动浏览器。全局业务并发首次默认5，已保存的代理管理运行参数继续生效。
 
 浏览器退出后，在账号档案锁内回收 HTTP、代码和 GPU/Dawn 可重建缓存；崩溃遗留缓存在下次打开档案时回收。固定指纹、设备身份、Cookie、网站持久存储和浏览器设置继续保留。执行期间可使用缓存，下一次启动会重新生成；缓存限制不代表整个档案大小的硬上限，长期网站数据仍需计入磁盘预算。回收失败会记录 `profile_cache_cleanup_failed`，不会将已完成登录改判为凭据错误。
 
@@ -34,6 +34,12 @@ python3 deploy/manage.py start
 新安装会在权限为 `600` 的 `installation/control.env` 中生成 `TSW_CPA_WEBHOOK_SECRET`。如需接收 CPA 降智检测事件，在 CPA 插件中配置接收地址 `https://你的管理域名/internal/v1/cpa/degradation-events`，并填写同一密钥。接收端校验签名，以 CPA 当前账号邮箱匹配母号下新鲜、完整的 Team 成员证据，自动接管唯一的普通 Pro 成员后，会自动执行：隔离 CPA 凭证 → 移除该成员 → 备用号补位 → 获取工作空间 OAuth 凭证 → 注册回 CPA。无需逐单批准。只有 CPA 确认注册成功才标记完成。置信度不足、成员证据过期、角色受保护或没有可用备用号时不会继续移除成员。已有安装不会被更新流程自动写入密钥；需要启用时，请手动向原 `control.env` 添加一个至少 16 字符的随机密钥并重启 control 服务。
 
 还需在 control 服务环境配置 `TSW_CPA_MANAGEMENT_URL`（CPA 管理 API 基础地址，例如 `http://127.0.0.1:8317`）和 `TSW_CPA_MANAGEMENT_KEY`（CPA 当前的管理密钥）。地址必须为 control 服务可访问的回环地址；容器内的 `127.0.0.1` 指向容器自身。未配置时轮换等待，不会踢成员。Apophis 导入的子号就是备用池，无需手工建立备用批次。系统会将材料完整且不在 CPA 当前账号或 Team active 成员中的账号纳入自动备用组，准备个人登录会话并实际探测；只有探测可用的账号才能补位。成员权限不足或证据过期时，后台刷新所选母号的专用成员验证记录，并重试近期未映射回调。管理端“凭证自动轮换”可查看每个阶段与失败原因。连续远端失败会阻断案例并触发熔断。
+
+CPA 已有子号可导入 Apophis 的完整登录材料（账号、密码及所需 TOTP）托管。系统按身份匹配 CPA 当前凭证，匹配到 CPA 的账号不会进入备用池。每两分钟读取 CPA 已观察到的认证状态，明确 401 时创建独立的同账号 OAuth 续授权任务；它不触发踢人或补位，也不尝试 PAT。复用隔离的个人登录会话，按原有浏览器 PKCE 流程获取带 `refresh_token` 的 OAuth 凭证，更新 CPA 原文件名，并下载核对账号及实际令牌摘要。
+
+新补位账号复用已经成功生成的 OAuth 版本交付 CPA。每次首次交付或续授权，从 AP 代理池的健康节点中均匀随机选择一个出口，写入 CPA 的 `proxy_url`；凭证和代理分配结果一起加密保存，上传重试不重新登录、不重新选代理。代理池无可用节点时等待或失败，不静默直连。CPA 回读必须核对账号、凭证和代理摘要，成功后才完成任务。
+
+任务记录保存在 `tsw_cpa_reauthorizations`，失败退避，最多三次后阻断；人工禁用或轮换隔离的 CPA 文件不自动恢复。401 来源为 CPA 已观察到的上游失败，不会为了巡检主动消耗模型调用。VLESS、VMess、Hysteria2 需先由相应协议客户端转换为本机 HTTP/SOCKS 入口，再导入 AP 自带代理池；协议客户端须随系统启动，配置文件应限制读取权限。
 
 <details>
 <summary><strong>在服务器安装，从自己的电脑打开</strong></summary>

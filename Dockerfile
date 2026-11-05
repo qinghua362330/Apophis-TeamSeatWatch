@@ -24,13 +24,10 @@ COPY --from=web-builder /src/web/dist/owner /app/owner
 COPY --from=web-builder /src/web/dist/public /app/public
 ENTRYPOINT ["/usr/bin/tini", "-g", "--", "/apophis-teamseatwatch"]
 
-FROM debian@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587 AS browser-artifact
-RUN apt-get update && apt-get install -y --no-install-recommends unzip && rm -rf /var/lib/apt/lists/*
-COPY .browser-artifacts/ShardX-Linux.zip /tmp/ShardX-Linux.zip
-RUN echo '1de8a89ea228e4a0a602fd0c13c7a324fe5f310e9b08b0c4bf37e9ed0c474fcd  /tmp/ShardX-Linux.zip' | sha256sum -c - \
-    && unzip -q /tmp/ShardX-Linux.zip -d /opt \
-    && mv /opt/ShardX-Linux /opt/shardx \
-    && echo '5b1533db3b08c9cc8f7c24e0c2e31b6202d0bb1dad880f04978d03ce9e4b3ffa  /opt/shardx/chrome' | sha256sum -c -
+# Reuse the already deployed, checksum-qualified browser layer. The public
+# download behind the old URL is mutable; pinning the image digest keeps the
+# deployed ShardX 156.0.8078.48 executable unchanged in subsequent builds.
+FROM ghcr.io/qinghua362330/apophis-teamseatwatch@sha256:076b0549f664367c5869a875a259812c42612d4041da07504f8ccfdb735ebe16 AS browser-artifact
 
 FROM control-runtime AS browser-runtime
 RUN apt-get update \
@@ -40,7 +37,8 @@ RUN apt-get update \
        libatspi2.0-0 libcups2 libdbus-1-3 libexpat1 \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=browser-artifact /opt/shardx /opt/shardx
-RUN /opt/shardx/chrome --version | grep -Eq '^ShardX 156\.0\.8078\.48[[:space:]]*$' \
+RUN echo '5b1533db3b08c9cc8f7c24e0c2e31b6202d0bb1dad880f04978d03ce9e4b3ffa  /opt/shardx/chrome' | sha256sum -c - \
+    && /opt/shardx/chrome --version | grep -Eq '^ShardX 156\.0\.8078\.48[[:space:]]*$' \
     && mkdir -p /var/lib/teamseatwatch/browser-profiles \
     && chmod 700 /var/lib/teamseatwatch/browser-profiles
 ENTRYPOINT ["/usr/bin/tini", "-g", "--", "xvfb-run", "-a", "-s", "-screen 0 1366x768x24", "/apophis-teamseatwatch"]

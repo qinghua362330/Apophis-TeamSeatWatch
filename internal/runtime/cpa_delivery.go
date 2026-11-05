@@ -53,7 +53,11 @@ func (h *OwnerAuthHandler) applyCPARotationAction(ctx context.Context, action cp
 	if h.cpaCredentials == nil {
 		return
 	}
-	applyCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	duration := 30 * time.Second
+	if action.Kind == cpaDeliveryReplacement {
+		duration = 2 * time.Minute
+	}
+	applyCtx, cancel := context.WithTimeout(ctx, duration)
 	defer cancel()
 	var receipt cpacred.Receipt
 	var applyErr error
@@ -96,7 +100,26 @@ func (h *OwnerAuthHandler) applyCPAReplacement(ctx context.Context, action cpaRo
 	if credential.Name != action.CredentialName || credential.Revision != action.CredentialRevision {
 		return cpacred.Receipt{}, errors.New("replacement credential changed after delivery was claimed")
 	}
-	return h.cpaCredentials.Upload(ctx, credential.Name, credential.AuthFile)
+	if h.cpaProxyAssignment != nil {
+		// Production CPA delivery pins its assigned proxy. The published OAuth
+		// version remains the immutable source identity for this delivery.
+		credential, err = h.cpaReplacementCredential(ctx, action, credential)
+		if err != nil {
+			return cpacred.Receipt{}, err
+		}
+	}
+	receipt, err := h.cpaCredentials.Upload(ctx, credential.Name, credential.AuthFile)
+	if err != nil {
+		return cpacred.Receipt{}, err
+	}
+	if verifier, ok := h.cpaCredentials.(interface {
+		Verify(context.Context, string) error
+	}); ok {
+		if err = verifier.Verify(ctx, credential.Name); err != nil {
+			return cpacred.Receipt{}, err
+		}
+	}
+	return receipt, nil
 }
 
 // finishCPARotationAction records the observed outcome and advances the case.

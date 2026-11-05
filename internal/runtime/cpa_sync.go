@@ -141,6 +141,17 @@ func (h *OwnerAuthHandler) runCPASyncLoop(ctx context.Context) {
 		if _, err := h.syncCPACredentialInventory(ctx); err != nil {
 			h.recordCPASyncFailure(ctx, err)
 			slog.WarnContext(ctx, "cpa_inventory_sync_failed", "error", err)
+			return
+		}
+		// 401 recovery is a separate durable queue. Enqueue only after the
+		// inventory transaction commits, and never create a degradation case here.
+		if h.cpaCredentials != nil {
+			files, err := h.cpaCredentials.List(ctx)
+			if err != nil {
+				slog.WarnContext(ctx, "cpa_reauthorization_inventory_failed", "error", err)
+			} else if err := h.enqueueCPAReauthorizations(ctx, files); err != nil {
+				slog.WarnContext(ctx, "cpa_reauthorization_enqueue_failed", "error", err)
+			}
 		}
 	}
 	sync()

@@ -33,6 +33,39 @@ type Credential struct {
 	Email    string
 }
 
+// BuildCodexPATCredential renders the long-lived personal access token format
+// created by ChatGPT's /wham/auth-credentials endpoint. CPA uses the session
+// bearer as the account access token and the generated PAT as an authorization
+// header; refresh_token and id_token are intentionally absent.
+func BuildCodexPATCredential(sessionAccess, authorization, accountID, email string, expiresAt, now time.Time) (Credential, error) {
+	sessionAccess = strings.TrimSpace(sessionAccess)
+	authorization = strings.TrimSpace(authorization)
+	accountID = strings.TrimSpace(accountID)
+	if sessionAccess == "" || authorization == "" || accountID == "" || expiresAt.IsZero() || !expiresAt.After(now) {
+		return Credential{}, errors.New("CPA personal access token material is incomplete")
+	}
+	if len(sessionAccess) > 16384 || len(authorization) > 16384 || strings.ContainsAny(sessionAccess+authorization, "\r\n\t\x00") {
+		return Credential{}, errors.New("CPA personal access token material is invalid")
+	}
+	material := credentialPATMaterialDigest(sessionAccess, authorization, accountID)
+	revision := hex.EncodeToString(material[:])
+	email = strings.ToLower(strings.TrimSpace(email))
+	authFile, err := json.Marshal(map[string]any{
+		"credential_revision": revision,
+		"type":                "codex",
+		"access_token":        sessionAccess,
+		"account_id":          accountID,
+		"email":               email,
+		"headers":             map[string]string{"authorization": authorization},
+		"last_refresh":        now.UTC().Format(time.RFC3339),
+		"expired":             expiresAt.UTC().Format(time.RFC3339),
+	})
+	if err != nil {
+		return Credential{}, err
+	}
+	return Credential{Name: "codex-" + hex.EncodeToString(material[:8]) + ".json", AuthFile: authFile, Revision: revision, Email: email}, nil
+}
+
 // ParseDeliveryPayload decodes one stored credential version.
 func ParseDeliveryPayload(raw []byte) (DeliveryPayload, error) {
 	var payload DeliveryPayload
@@ -108,6 +141,18 @@ func BuildCodexCredential(payload DeliveryPayload, fallbackEmail string, now tim
 
 func credentialMaterialDigest(access, refresh, idToken, accountID string) [32]byte {
 	return sha256.Sum256([]byte(strings.Join([]string{access, refresh, idToken, accountID}, "\x00")))
+}
+
+func credentialPATMaterialDigest(access, authorization, accountID string) [32]byte {
+	return sha256.Sum256([]byte(strings.Join([]string{access, authorization, accountID}, "\x00")))
+}
+
+func credentialMaterialDigestWithProxy(access, refresh, idToken, accountID, proxy string) [32]byte {
+	return sha256.Sum256([]byte(strings.Join([]string{access, refresh, idToken, accountID, proxy}, "\x00")))
+}
+
+func credentialPATMaterialDigestWithProxy(access, authorization, accountID, proxy string) [32]byte {
+	return sha256.Sum256([]byte(strings.Join([]string{access, authorization, accountID, proxy}, "\x00")))
 }
 
 type tokenClaims struct {

@@ -74,7 +74,9 @@ type OwnerAuthHandler struct {
 	cpaWebhookSecret           []byte
 	// cpaCredentials is nil unless the deployment attaches CPA management. A nil
 	// port keeps every remote CPA step disabled rather than partially executed.
-	cpaCredentials cpaCredentialPort
+	cpaCredentials     cpaCredentialPort
+	cpaOAuthIssuer     func(context.Context, uuid.UUID, string, string, string) (cpacred.Credential, error)
+	cpaProxyAssignment func(context.Context, cpacred.Credential) (cpacred.Credential, error)
 }
 
 type ownerContext struct {
@@ -182,6 +184,8 @@ func NewOwnerAuthHandler(config OwnerAuthConfig) (*OwnerControl, func(), error) 
 		}
 		return handler.egress.Acquire(ctx)
 	}
+	handler.cpaOAuthIssuer = handler.acquireCPAOAuth
+	handler.cpaProxyAssignment = handler.assignCPACredentialProxy
 	handler.rotationJoinAdapters = officialRotationJoinAdapters
 	handler.rotationCredentialAdapters = func(client platform.DiscoveryClient) platform.RotationCredentialAdapter {
 		return platform.OfficialRotationCredentialAdapter{Client: client}
@@ -210,6 +214,11 @@ func NewOwnerAuthHandler(config OwnerAuthConfig) (*OwnerControl, func(), error) 
 		defer close(cpaSyncDone)
 		handler.runCPASyncLoop(serviceContext)
 	}()
+	cpaReauthorizationDone := make(chan struct{})
+	go func() {
+		defer close(cpaReauthorizationDone)
+		handler.runCPAReauthorizationLoop(serviceContext)
+	}()
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /internal/v1/cpa/degradation-events", handler.receiveCPADegradationEvent)
 	ownerHandler := ownerapi.HandlerWithOptions(handler, ownerapi.StdHTTPServerOptions{
@@ -233,6 +242,7 @@ func NewOwnerAuthHandler(config OwnerAuthConfig) (*OwnerControl, func(), error) 
 		<-proxyDone
 		<-cpaAutomationDone
 		<-cpaSyncDone
+		<-cpaReauthorizationDone
 		pool.Close()
 	}, nil
 }

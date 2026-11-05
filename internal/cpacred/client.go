@@ -17,6 +17,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -50,15 +51,59 @@ type Config struct {
 
 // File is one auth file as CPA's management API reports it.
 type File struct {
-	Name      string
-	ID        string
-	AuthIndex string
-	Provider  string
-	Email     string
-	AccountID string
-	Revision  string
-	Status    string
-	Disabled  bool
+	Name          string
+	ID            string
+	AuthIndex     string
+	Provider      string
+	Email         string
+	AccountID     string
+	Revision      string
+	Status        string
+	StatusMessage string
+	LastError     string
+	StatusCode    int
+	Disabled      bool
+}
+
+// Unauthorized reports an explicit upstream 401 credential failure. It avoids
+// treating rate limits, transient errors, or a generic disabled status as an
+// authorization expiry signal.
+var cpaUnauthorizedStatus = regexp.MustCompile(`(?i)(?:^|\b)(?:http(?:/[0-9.]+)?|status(?:[_ ]code)?|code|returned)[:= ]+401(?:\b|$)`)
+var cpaUnauthorizedMessage = regexp.MustCompile(`(?i)^(?:unauthorized\b|(?:access|refresh)\s+token\s+(?:expired|invalid)\b)`)
+
+func (f File) Unauthorized() bool {
+	if f.StatusCode != 0 {
+		return f.StatusCode == http.StatusUnauthorized
+	}
+	for _, value := range []string{f.StatusMessage, f.LastError} {
+		text := strings.ToLower(strings.TrimSpace(value))
+		if strings.Contains(text, "not unauthorized") {
+			continue
+		}
+		if text == "401" || text == "unauthorized" || text == "invalid_token" || text == "token expired" || cpaUnauthorizedStatus.MatchString(text) || cpaUnauthorizedMessage.MatchString(text) {
+			return true
+		}
+		var payload struct {
+			Status     int    `json:"status"`
+			StatusCode int    `json:"status_code"`
+			Code       string `json:"code"`
+			Error      struct {
+				Code string `json:"code"`
+				Type string `json:"type"`
+			} `json:"error"`
+		}
+		if json.Unmarshal([]byte(text), &payload) == nil {
+			if payload.Status == 401 || payload.StatusCode == 401 {
+				return true
+			}
+			for _, code := range []string{payload.Code, payload.Error.Code, payload.Error.Type} {
+				if code == "unauthorized" || code == "invalid_token" || code == "token_expired" {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // Receipt is a durable, non-secret record of one accepted management write.
@@ -150,17 +195,21 @@ func (c *Client) List(ctx context.Context) ([]File, error) {
 	}
 	var payload struct {
 		Files []struct {
-			ID                 string `json:"id"`
-			AuthIndex          string `json:"auth_index"`
-			Name               string `json:"name"`
-			Type               string `json:"type"`
-			Provider           string `json:"provider"`
-			Email              string `json:"email"`
-			AccountID          string `json:"account_id"`
-			Account            string `json:"account"`
-			CredentialRevision string `json:"credential_revision"`
-			Status             string `json:"status"`
-			Disabled           bool   `json:"disabled"`
+			ID                 string          `json:"id"`
+			AuthIndex          string          `json:"auth_index"`
+			Name               string          `json:"name"`
+			Type               string          `json:"type"`
+			Provider           string          `json:"provider"`
+			Email              string          `json:"email"`
+			AccountID          string          `json:"account_id"`
+			Account            string          `json:"account"`
+			CredentialRevision string          `json:"credential_revision"`
+			Status             string          `json:"status"`
+			StatusMessage      string          `json:"status_message"`
+			LastError          string          `json:"last_error"`
+			Error              json.RawMessage `json:"error"`
+			StatusCode         int             `json:"status_code"`
+			Disabled           bool            `json:"disabled"`
 		} `json:"files"`
 	}
 	if err = json.Unmarshal(body, &payload); err != nil {
@@ -180,18 +229,71 @@ func (c *Client) List(ctx context.Context) ([]File, error) {
 			continue
 		}
 		files = append(files, File{
-			Name:      name,
-			ID:        strings.TrimSpace(item.ID),
-			AuthIndex: strings.TrimSpace(item.AuthIndex),
-			Provider:  provider,
-			Email:     strings.ToLower(strings.TrimSpace(item.Email)),
-			AccountID: firstNonEmpty(item.AccountID, item.Account),
-			Revision:  strings.TrimSpace(item.CredentialRevision),
-			Status:    strings.TrimSpace(item.Status),
-			Disabled:  item.Disabled,
+			Name:          name,
+			ID:            strings.TrimSpace(item.ID),
+			AuthIndex:     strings.TrimSpace(item.AuthIndex),
+			Provider:      provider,
+			Email:         strings.ToLower(strings.TrimSpace(item.Email)),
+			AccountID:     firstNonEmpty(item.AccountID, item.Account),
+			Revision:      strings.TrimSpace(item.CredentialRevision),
+			Status:        strings.TrimSpace(item.Status),
+			StatusMessage: firstNonEmpty(item.StatusMessage, jsonErrorText(item.Error)),
+			LastError:     strings.TrimSpace(item.LastError),
+			StatusCode:    item.StatusCode,
+			Disabled:      item.Disabled,
 		})
 	}
 	return files, nil
+}
+
+func jsonErrorText(raw json.RawMessage) string {
+	if len(raw) == 0 || string(raw) == "null" {
+		return ""
+	}
+	var text string
+	if json.Unmarshal(raw, &text) == nil {
+		return strings.TrimSpace(text)
+	}
+	var fields struct {
+		Code       string `json:"code"`
+		Message    string `json:"message"`
+		StatusCode int    `json:"status_code"`
+	}
+	if json.Unmarshal(raw, &fields) == nil {
+		return firstNonEmpty(fields.Code, fields.Message)
+	}
+	return ""
+}
+
+// CredentialIdentity reads authoritative non-secret identity and material revision.
+// It is used before renewing a CPA file whose listing omits account_id.
+func (c *Client) CredentialIdentity(ctx context.Context, name string) (File, error) {
+	raw, err := c.download(ctx, name)
+	if err != nil {
+		return File{}, err
+	}
+	// CPA may legitimately refresh OAuth material without rewriting our
+	// optional metadata marker. Observe actual material, not that old marker.
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(raw, &fields) != nil {
+		return File{}, ErrCredentialIdentityMismatch
+	}
+	delete(fields, "credential_revision")
+	observed, err := json.Marshal(fields)
+	if err != nil {
+		return File{}, ErrCredentialIdentityMismatch
+	}
+	identity, err := authFileIdentity(observed)
+	if err != nil {
+		return File{}, err
+	}
+	var metadata struct {
+		Type string `json:"type"`
+	}
+	if json.Unmarshal(raw, &metadata) != nil || metadata.Type != "codex" {
+		return File{}, ErrCredentialIdentityMismatch
+	}
+	return File{Name: name, Provider: "codex", Email: identity.email, AccountID: identity.accountID, Revision: identity.revision}, nil
 }
 
 // Lookup resolves one credential selector (file name or auth index) to a file.
@@ -328,12 +430,14 @@ type authIdentity struct {
 
 func authFileIdentity(raw []byte) (authIdentity, error) {
 	var payload struct {
-		AccountID    string `json:"account_id"`
-		Email        string `json:"email"`
-		Revision     string `json:"credential_revision"`
-		AccessToken  string `json:"access_token"`
-		RefreshToken string `json:"refresh_token"`
-		IDToken      string `json:"id_token"`
+		AccountID    string            `json:"account_id"`
+		Email        string            `json:"email"`
+		Revision     string            `json:"credential_revision"`
+		AccessToken  string            `json:"access_token"`
+		RefreshToken string            `json:"refresh_token"`
+		IDToken      string            `json:"id_token"`
+		ProxyURL     string            `json:"proxy_url"`
+		Headers      map[string]string `json:"headers"`
 	}
 	if err := json.Unmarshal(raw, &payload); err != nil {
 		return authIdentity{}, errors.New("CPA auth file payload is invalid")
@@ -342,7 +446,17 @@ func authFileIdentity(raw []byte) (authIdentity, error) {
 	if accountID == "" {
 		return authIdentity{}, ErrCredentialIdentityMismatch
 	}
+	authorization := strings.TrimSpace(payload.Headers["authorization"])
 	material := credentialMaterialDigest(strings.TrimSpace(payload.AccessToken), strings.TrimSpace(payload.RefreshToken), strings.TrimSpace(payload.IDToken), accountID)
+	if authorization != "" {
+		if strings.TrimSpace(payload.ProxyURL) != "" {
+			material = credentialPATMaterialDigestWithProxy(strings.TrimSpace(payload.AccessToken), authorization, accountID, strings.TrimSpace(payload.ProxyURL))
+		} else {
+			material = credentialPATMaterialDigest(strings.TrimSpace(payload.AccessToken), authorization, accountID)
+		}
+	} else if strings.TrimSpace(payload.ProxyURL) != "" {
+		material = credentialMaterialDigestWithProxy(strings.TrimSpace(payload.AccessToken), strings.TrimSpace(payload.RefreshToken), strings.TrimSpace(payload.IDToken), accountID, strings.TrimSpace(payload.ProxyURL))
+	}
 	revision := hex.EncodeToString(material[:])
 	if payload.Revision != "" && payload.Revision != revision {
 		return authIdentity{}, ErrCredentialIdentityMismatch
@@ -402,18 +516,22 @@ func validAuthFile(authFile []byte) bool {
 		return false
 	}
 	var decoded struct {
-		Type         string `json:"type"`
-		AccessToken  string `json:"access_token"`
-		RefreshToken string `json:"refresh_token"`
-		IDToken      string `json:"id_token"`
+		Type         string            `json:"type"`
+		AccessToken  string            `json:"access_token"`
+		RefreshToken string            `json:"refresh_token"`
+		IDToken      string            `json:"id_token"`
+		Headers      map[string]string `json:"headers"`
 	}
 	if json.Unmarshal(authFile, &decoded) != nil {
 		return false
 	}
-	return decoded.Type == "codex" &&
-		strings.TrimSpace(decoded.AccessToken) != "" &&
-		strings.TrimSpace(decoded.RefreshToken) != "" &&
-		strings.TrimSpace(decoded.IDToken) != ""
+	if decoded.Type != "codex" || strings.TrimSpace(decoded.AccessToken) == "" {
+		return false
+	}
+	if strings.TrimSpace(decoded.RefreshToken) != "" && strings.TrimSpace(decoded.IDToken) != "" {
+		return true
+	}
+	return strings.TrimSpace(decoded.Headers["authorization"]) != ""
 }
 
 func validName(name string) bool {

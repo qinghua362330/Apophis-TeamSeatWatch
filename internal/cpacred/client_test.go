@@ -17,16 +17,17 @@ import (
 const testKey = "0123456789abcdef0123456789abcdef"
 
 type fakeCPA struct {
-	mu               sync.Mutex
-	files            map[string]map[string]any
-	order            []string
-	redirect         bool
-	lieAbout         bool
-	omitAccount      bool
-	accountOverride  string
-	omitRevision     bool
-	revisionOverride string
-	authFiles        map[string][]byte
+	mu                    sync.Mutex
+	files                 map[string]map[string]any
+	order                 []string
+	redirect              bool
+	lieAbout              bool
+	omitAccount           bool
+	accountOverride       string
+	omitRevision          bool
+	revisionOverride      string
+	authorizationOverride string
+	authFiles             map[string][]byte
 }
 
 func newFakeCPA() *fakeCPA {
@@ -110,6 +111,10 @@ func (f *fakeCPA) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if f.omitAccount {
 				delete(downloaded, "account_id")
 			}
+			if f.authorizationOverride != "" {
+				downloaded["headers"] = map[string]string{"authorization": f.authorizationOverride}
+			}
+
 			if f.accountOverride != "" {
 				downloaded["account_id"] = f.accountOverride
 			}
@@ -419,6 +424,56 @@ func TestBuildCodexCredentialFailsClosed(t *testing.T) {
 	}
 }
 
+func TestBuildCodexPATCredential(t *testing.T) {
+	now := time.Date(2026, 11, 5, 12, 0, 0, 0, time.UTC)
+	expires := now.Add(365 * 24 * time.Hour)
+	credential, err := BuildCodexPATCredential("session-jwt", "pat-token", "acct-1", "User@Example.com", expires, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(credential.AuthFile, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded["access_token"] != "session-jwt" || decoded["refresh_token"] != nil || decoded["id_token"] != nil {
+		t.Fatalf("unexpected PAT fields: %#v", decoded)
+	}
+	headers, ok := decoded["headers"].(map[string]any)
+	if !ok || headers["authorization"] != "pat-token" {
+		t.Fatalf("missing authorization header: %#v", decoded["headers"])
+	}
+	if decoded["expired"] != expires.Format(time.RFC3339) || credential.Email != "user@example.com" {
+		t.Fatalf("unexpected expiry/identity: %#v", decoded)
+	}
+	if !validAuthFile(credential.AuthFile) {
+		t.Fatal("PAT auth file rejected")
+	}
+}
+
+func TestFileUnauthorizedIsStrict(t *testing.T) {
+	for _, file := range []File{
+		{StatusCode: http.StatusUnauthorized},
+		{StatusMessage: "HTTP 401 unauthorized"},
+		{LastError: "invalid_token"},
+		{StatusMessage: "unauthorized (refresh token invalid)"},
+		{StatusMessage: "Access token expired"},
+	} {
+		if !file.Unauthorized() {
+			t.Fatalf("expected unauthorized: %#v", file)
+		}
+	}
+	for _, file := range []File{
+		{StatusMessage: "HTTP 429 rate limited"},
+		{StatusMessage: "HTTP 403 forbidden"},
+		{StatusMessage: "error 4010"},
+		{StatusMessage: "not unauthorized"},
+	} {
+		if file.Unauthorized() {
+			t.Fatalf("false unauthorized: %#v", file)
+		}
+	}
+}
+
 func TestCredentialNameIsStable(t *testing.T) {
 	payload := DeliveryPayload{AccessToken: "a", RefreshToken: "r", IDToken: "i", WorkspaceID: "w"}
 	first, err := BuildCodexCredential(payload, "", time.Unix(0, 0).UTC())
@@ -446,5 +501,30 @@ func TestNewAcceptsExistingManagementKey(t *testing.T) {
 		if _, err := New(Config{BaseURL: "http://127.0.0.1:8318", APIKey: key}); err == nil {
 			t.Fatal("invalid management key accepted")
 		}
+	}
+}
+
+func TestPATUploadVerifiesActualAuthorizationMaterial(t *testing.T) {
+	fake := newFakeCPA()
+	client := newTestClient(t, fake)
+	credential, err := BuildCodexPATCredential("session-fixture", "pat-fixture", "workspace-fixture", "member@example.test", time.Now().Add(time.Hour), time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = client.Upload(t.Context(), credential.Name, credential.AuthFile); err != nil {
+		t.Fatal(err)
+	}
+	identity, err := client.CredentialIdentity(t.Context(), credential.Name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if identity.AccountID != "workspace-fixture" || identity.Revision != credential.Revision {
+		t.Fatal("authoritative identity mismatch")
+	}
+	fake.mu.Lock()
+	fake.authorizationOverride = "wrong-pat-fixture"
+	fake.mu.Unlock()
+	if _, err = client.Upload(t.Context(), credential.Name, credential.AuthFile); !errors.Is(err, ErrCredentialIdentityMismatch) {
+		t.Fatalf("wrong PAT accepted: %v", err)
 	}
 }

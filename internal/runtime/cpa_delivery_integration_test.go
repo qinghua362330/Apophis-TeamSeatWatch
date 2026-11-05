@@ -3,6 +3,7 @@
 package runtime
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"database/sql"
@@ -28,6 +29,7 @@ type fakeCPAPort struct {
 	mu       sync.Mutex
 	files    map[string]cpacred.File
 	calls    []string
+	uploaded []byte
 	failWith error
 }
 
@@ -73,13 +75,14 @@ func (f *fakeCPAPort) SetDisabled(_ context.Context, name string, disabled bool)
 	return cpacred.Receipt{Operation: "status", Name: name, StatusCode: http.StatusOK}, nil
 }
 
-func (f *fakeCPAPort) Upload(_ context.Context, name string, _ []byte) (cpacred.Receipt, error) {
+func (f *fakeCPAPort) Upload(_ context.Context, name string, payload []byte) (cpacred.Receipt, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.failWith != nil {
 		return cpacred.Receipt{}, f.failWith
 	}
 	f.calls = append(f.calls, "upload:"+name)
+	f.uploaded = append([]byte(nil), payload...)
 	f.files[name] = cpacred.File{Name: name, Provider: "codex"}
 	return cpacred.Receipt{Operation: "upload", Name: name, StatusCode: http.StatusOK}, nil
 }
@@ -358,6 +361,14 @@ func TestCPAAutomaticRotationCompletesDelivery(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// One proxy assignment is encrypted with the published OAuth version.
+	// Upload retries must retain this same assignment and credential material.
+	assignments := 0
+	handler.cpaProxyAssignment = func(_ context.Context, source cpacred.Credential) (cpacred.Credential, error) {
+		assignments++
+		return cpacred.WithProxy(source, "socks5://127.0.0.1:19080")
+	}
+
 	// A published version cannot complete the case while CPA rejects registration.
 	port.failWith = errFakeRemoteFailure
 	step("delivering")
@@ -381,6 +392,19 @@ func TestCPAAutomaticRotationCompletesDelivery(t *testing.T) {
 	}
 	if attempts != 2 {
 		t.Fatalf("delivery attempts=%d want 2", attempts)
+	}
+	if assignments != 1 {
+		t.Fatalf("proxy assignments=%d want 1 across upload retries", assignments)
+	}
+	if !bytes.Contains(port.uploaded, []byte(`"proxy_url":"socks5://127.0.0.1:19080"`)) {
+		t.Fatal("CPA did not receive assigned proxy")
+	}
+	var ciphertext []byte
+	if err := pool.QueryRow(ctx, `SELECT credential_payload FROM tsw_cpa_rotation_deliveries WHERE case_id=$1 AND kind='delivery'`, caseID).Scan(&ciphertext); err != nil {
+		t.Fatal(err)
+	}
+	if len(ciphertext) == 0 || bytes.Contains(ciphertext, []byte("refresh-chain")) {
+		t.Fatal("OAuth checkpoint is absent or unsealed")
 	}
 	// A completion resets the circuit so one success clears prior failures.
 	var failures int
