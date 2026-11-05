@@ -364,7 +364,7 @@ func TestCPAAutomaticRotationCompletesDelivery(t *testing.T) {
 	// One proxy assignment is encrypted with the published OAuth version.
 	// Upload retries must retain this same assignment and credential material.
 	assignments := 0
-	handler.cpaProxyAssignment = func(_ context.Context, source cpacred.Credential) (cpacred.Credential, error) {
+	handler.cpaProxyAssignment = func(_ context.Context, _ uuid.UUID, source cpacred.Credential) (cpacred.Credential, error) {
 		assignments++
 		return cpacred.WithProxy(source, "socks5://127.0.0.1:19080")
 	}

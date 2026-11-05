@@ -15,6 +15,7 @@ var (
 	ErrEgressDrift    = errors.New("proxy_egress_drift")
 	ErrNodeInUse      = errors.New("proxy_node_in_use")
 	ErrSessionExpired = errors.New("proxy_session_expired")
+	ErrTargetNotFound = errors.New("proxy_target_not_found")
 	errLeaseBusy      = errors.New("proxy_capacity_busy")
 )
 
@@ -36,15 +37,16 @@ func stableWindow(ctx context.Context) time.Duration {
 // Lease binds one attempt to one admitted route. Release is explicit: closing
 // HTTP connections must never make the same measured exit available early.
 type Lease struct {
-	manager     *LeaseManager
-	candidate   Candidate
-	client      *http.Client
-	mode        Mode
-	fingerprint [32]byte
-	verifiedAt  time.Time
-	mu          sync.Mutex
-	released    bool
-	onRelease   func()
+	manager      *LeaseManager
+	candidate    Candidate
+	client       *http.Client
+	mode         Mode
+	fingerprint  [32]byte
+	verifiedAt   time.Time
+	mu           sync.Mutex
+	released     bool
+	onRelease    func()
+	driftHandler func(context.Context)
 }
 
 func (l *Lease) Mode() Mode           { return l.mode }
@@ -85,6 +87,15 @@ func (l *Lease) Release() {
 	}
 }
 
+// SetDriftHandler installs a best-effort persistence hook invoked after a
+// measured exit no longer matches the pinned fingerprint. The hook runs
+// outside the lease mutex and must not block lease release.
+func (l *Lease) SetDriftHandler(handler func(context.Context)) {
+	l.mu.Lock()
+	l.driftHandler = handler
+	l.mu.Unlock()
+}
+
 // Remeasure verifies that a later platform stage still uses the originally leased exit.
 func (l *Lease) Remeasure(ctx context.Context) error {
 	l.mu.Lock()
@@ -99,16 +110,19 @@ func (l *Lease) Remeasure(ctx context.Context) error {
 	body, err := probeBody(ctx, l.client, l.manager.router.config.IPEchoURL)
 	if err != nil {
 		l.manager.exclude(l.fingerprint)
+		l.notifyDrift(ctx)
 		return ErrEgressDrift
 	}
 	addr, err := NormalizePublicIP(body)
 	if err != nil {
 		l.manager.exclude(l.fingerprint)
+		l.notifyDrift(ctx)
 		return ErrEgressDrift
 	}
 	measured := Fingerprint(l.manager.router.config.HMACKey, l.manager.router.config.HMACKeyVersion, addr)
 	if subtle.ConstantTimeCompare(measured[:], l.fingerprint[:]) != 1 {
 		l.manager.exclude(l.fingerprint)
+		l.notifyDrift(ctx)
 		return ErrEgressDrift
 	}
 	l.mu.Lock()
@@ -117,12 +131,22 @@ func (l *Lease) Remeasure(ctx context.Context) error {
 	return nil
 }
 
+func (l *Lease) notifyDrift(ctx context.Context) {
+	l.mu.Lock()
+	h := l.driftHandler
+	l.mu.Unlock()
+	if h != nil {
+		h(ctx)
+	}
+}
+
 // LeaseManager provides the ADR-0004 in-process exclusion boundary for a single worker.
 type LeaseManager struct {
 	router       *Router
 	mu           sync.Mutex
 	candidates   []Candidate
 	active       map[[32]byte]Candidate
+	pinning      map[[32]byte]bool
 	quarantined  map[string]time.Time
 	mode         Mode
 	directActive int
@@ -153,7 +177,7 @@ func NewLeaseManager(router *Router, admission Admission) (*LeaseManager, error)
 	if router == nil {
 		return nil, errors.New("egress router is required")
 	}
-	manager := &LeaseManager{router: router, mode: router.config.Mode, active: make(map[[32]byte]Candidate), quarantined: make(map[string]time.Time)}
+	manager := &LeaseManager{router: router, mode: router.config.Mode, active: make(map[[32]byte]Candidate), pinning: make(map[[32]byte]bool), quarantined: make(map[string]time.Time)}
 	if router.config.Mode == ModeRequired {
 		manager.candidates = append(manager.candidates, admission.Candidates...)
 	}
@@ -190,6 +214,9 @@ func (m *LeaseManager) acquire(ctx context.Context, limit int) (*Lease, error) {
 				continue
 			}
 			if _, used := m.active[candidate.Fingerprint]; used {
+				continue
+			}
+			if m.pinning[candidate.Fingerprint] {
 				continue
 			}
 			busy := false

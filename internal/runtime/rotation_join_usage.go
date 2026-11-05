@@ -166,6 +166,11 @@ func (h *OwnerAuthHandler) observeRotationJoinUsage(ctx context.Context, owner o
 	defer leaseCancel()
 	bounded = deadline
 	evidence := platform.RotationUsageEvidence{Result: "unknown", Scope: "account", Diagnostic: "usage_unknown", Windows: []platform.RotationUsageWindow{}}
+	bounded, releaseTargetRoute, bindErr := h.manualTargetRoute(bounded, i.candidateAccountID)
+	if bindErr != nil {
+		return bindErr
+	}
+	defer releaseTargetRoute()
 	route, routeErr := h.rotationJoinEgress(bounded)
 	if route != nil {
 		defer route.Release()

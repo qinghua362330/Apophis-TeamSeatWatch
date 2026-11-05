@@ -67,6 +67,9 @@ func (h *OwnerAuthHandler) enqueueCPAReauthorizations(ctx context.Context, files
 		if err != nil {
 			return err
 		}
+		if err := h.seedCPATargetRoute(ctx, target, actual); err != nil {
+			return err
+		}
 		_, err = h.pool.Exec(ctx, `INSERT INTO tsw_cpa_reauthorizations(credential_id,credential_name,remote_revision,workspace_id,target_account_id,source_secret_revision)
     VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(credential_name,remote_revision) DO NOTHING`, cpaCredentialID(file), file.Name, actual.Revision, actual.AccountID, target, revision)
 		if err != nil {
@@ -189,7 +192,7 @@ func (h *OwnerAuthHandler) processCPAReauthorization(ctx context.Context, w cpaR
 			return err
 		}
 		if h.cpaProxyAssignment != nil {
-			credential, err = h.cpaProxyAssignment(ctx, credential)
+			credential, err = h.cpaProxyAssignment(ctx, w.Target, credential)
 			if err != nil {
 				return err
 			}
@@ -233,6 +236,9 @@ func (h *OwnerAuthHandler) processCPAReauthorization(ctx context.Context, w cpaR
 	}
 	if currentIdentity.Revision != w.RemoteRevision && currentIdentity.Revision != credential.Revision {
 		return errCPAReauthorizationSuperseded
+	}
+	if err = h.verifyCPARoute(ctx, w.Target, credential); err != nil {
+		return err
 	}
 	if _, err = h.cpaCredentials.Upload(ctx, w.Name, credential.AuthFile); err != nil {
 		return err

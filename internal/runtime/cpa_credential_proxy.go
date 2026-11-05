@@ -5,6 +5,7 @@ import (
 	cryptorand "crypto/rand"
 	"errors"
 	"fmt"
+	"github.com/google/uuid"
 	"io"
 	"math/big"
 
@@ -24,7 +25,16 @@ type cpaProxySecret struct {
 // commits it into the CPA auth JSON. It deliberately has no direct fallback:
 // callers that require proxy routing must fail closed when the pool is empty.
 // The caller persists the returned credential in its sealed retry checkpoint.
-func (h *OwnerAuthHandler) assignCPACredentialProxy(ctx context.Context, credential cpacred.Credential) (cpacred.Credential, error) {
+func (h *OwnerAuthHandler) assignCPACredentialProxy(ctx context.Context, targetID uuid.UUID, credential cpacred.Credential) (cpacred.Credential, error) {
+	if h != nil && h.targetRoutes != nil {
+		enabled, err := h.targetRoutes.Enabled(ctx)
+		if err != nil {
+			return cpacred.Credential{}, err
+		}
+		if enabled {
+			return h.targetRoutes.WithCredential(ctx, targetID, credential)
+		}
+	}
 	if h == nil || h.proxyPool == nil || h.proxyPool.pool == nil {
 		return cpacred.Credential{}, errCPACredentialProxyUnavailable
 	}

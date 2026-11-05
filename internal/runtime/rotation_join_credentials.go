@@ -33,6 +33,11 @@ func (h *OwnerAuthHandler) saveRotationJoinCredentials(ctx context.Context, owne
 	keys := rotationAuthorizationKeys(i.ownerID, auth.preview)
 	// Queue before claiming any bounded credential attempt or database gate.
 	// Owner/candidate/workspace authority is rechecked after admission below.
+	ctx, releaseTargetRoute, routeBindErr := h.manualTargetRoute(ctx, i.candidateAccountID)
+	if routeBindErr != nil {
+		return routeBindErr
+	}
+	defer releaseTargetRoute()
 	route, err := h.rotationJoinEgress(ctx)
 	if route != nil {
 		defer route.Release()

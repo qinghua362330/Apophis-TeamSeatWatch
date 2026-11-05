@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/xft0202/Apophis-TeamSeatWatch/internal/accountsession"
 	"github.com/xft0202/Apophis-TeamSeatWatch/internal/egress"
 	"github.com/xft0202/Apophis-TeamSeatWatch/internal/platform"
 	targetdomain "github.com/xft0202/Apophis-TeamSeatWatch/internal/target"
@@ -35,7 +36,12 @@ type Worker struct {
 	Targets *targetdomain.Service
 	// Egress is the narrow lease boundary; the Owner can swap the pool at
 	// runtime behind this interface without re-wiring the worker.
-	Egress           egress.LeaseProvider
+	Egress egress.LeaseProvider
+	// TargetRoutes optionally pins account work to its durable account route.
+	// AccountRoutes is passed to accountsession so login and publication use
+	// the same route lease.
+	TargetRoutes     TargetRoutes
+	AccountRoutes    accountsession.RouteProvider
 	Reader           ReaderFactory
 	TargetProber     TargetProberFactory
 	PersonalProber   PersonalProbeProvider
@@ -157,6 +163,10 @@ func (w *Worker) RunOnce(ctx context.Context) (bool, error) {
 	}
 	if err != nil {
 		return false, err
+	}
+	ctx, lease, err = w.bindAccountRoute(ctx, item, lease)
+	if err != nil {
+		return true, w.finishAccountRouteFailure(ctx, item)
 	}
 	switch item.TaskType {
 	case "target_account_probe":

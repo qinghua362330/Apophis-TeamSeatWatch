@@ -110,7 +110,7 @@ func (h *OwnerAuthHandler) prepareCPASpareOnce(ctx context.Context) (bool, error
 	if err != nil {
 		return false, err
 	}
-	result, ensureErr := (accountsession.Store{Pool: h.pool, KeyRing: h.keyRing}).Ensure(ctx, id, h.personalRefresh, false, nil)
+	result, ensureErr := (accountsession.Store{Pool: h.pool, KeyRing: h.keyRing, Routes: h.accountRoutes()}).Ensure(ctx, id, h.personalRefresh, false, nil)
 	if ensureErr != nil {
 		return true, ensureErr
 	}
@@ -120,7 +120,12 @@ func (h *OwnerAuthHandler) prepareCPASpareOnce(ctx context.Context) (bool, error
 	if h.egress == nil {
 		return true, recordSpareProbe(ctx, h.pool, id, revision, "", platform.PersonalNetworkError, 0, "egress_unavailable")
 	}
-	probe := SavedTargetPersonalProbe{Pool: h.pool, KeyRing: h.keyRing, Adapter: platform.PersonalUsageProbe{Client: func(probeCtx context.Context) (*http.Client, func(), error) {
+	probe := SavedTargetPersonalProbe{Pool: h.pool, KeyRing: h.keyRing, Routes: h.accountRoutes(), Adapter: platform.PersonalUsageProbe{Client: func(probeCtx context.Context) (*http.Client, func(), error) {
+		if target := egress.Target(probeCtx); target != "" {
+			if borrowed, ok := egress.BorrowedLease(probeCtx, target); ok {
+				return borrowed.Client(), func() {}, nil
+			}
+		}
 		lease, leaseErr := h.egress.Acquire(egress.WithStableWindow(probeCtx, 2*time.Minute))
 		if leaseErr != nil {
 			return nil, nil, leaseErr

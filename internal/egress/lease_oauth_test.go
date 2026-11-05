@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestRequiredLeaseQuarantinesExitDrift(t *testing.T) {
@@ -37,6 +38,26 @@ func TestRequiredLeaseQuarantinesExitDrift(t *testing.T) {
 	lease.Release()
 	if manager.ActiveCount() != 0 || len(manager.candidates) != 0 {
 		t.Fatalf("drifted candidate was not released/quarantined: active=%d candidates=%d", manager.ActiveCount(), len(manager.candidates))
+	}
+}
+
+func TestRequiredLeaseDriftHandlerRunsOutsideRemeasure(t *testing.T) {
+	echo := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("1.1.1.1")) }))
+	defer echo.Close()
+	key := []byte("drift-handler-key")
+	fp := Fingerprint(key, "1", netip.MustParseAddr("8.8.8.8"))
+	router := &Router{config: Config{Mode: ModeRequired, IPEchoURL: echo.URL, HMACKey: key, HMACKeyVersion: "1"}}
+	m := &LeaseManager{router: router, candidates: []Candidate{{ID: "x", Fingerprint: fp}}, active: map[[32]byte]Candidate{fp: {ID: "x", Fingerprint: fp}}}
+	lease := &Lease{manager: m, candidate: m.candidates[0], client: echo.Client(), mode: ModeRequired, fingerprint: fp}
+	called := make(chan struct{}, 1)
+	lease.SetDriftHandler(func(context.Context) { called <- struct{}{} })
+	if !errors.Is(lease.Remeasure(context.Background()), ErrEgressDrift) {
+		t.Fatal("expected drift")
+	}
+	select {
+	case <-called:
+	case <-time.After(time.Second):
+		t.Fatal("drift handler was not called")
 	}
 }
 

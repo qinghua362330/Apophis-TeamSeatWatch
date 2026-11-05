@@ -37,7 +37,7 @@ func (w *Worker) runDeliveryGeneration(ctx context.Context, item Task, lease *eg
 	if err != nil {
 		return w.finishDeliveryAttempt(ctx, item, attempt, target, platform.DeliveryCredentialSet{}, probeFailure("oauth_configuration_invalid"))
 	}
-	sessionStore := accountsession.Store{Pool: w.Store.pool, KeyRing: w.Store.keyRing}
+	sessionStore := accountsession.Store{Pool: w.Store.pool, KeyRing: w.Store.keyRing, Routes: w.AccountRoutes}
 	refresher := platform.PersonalWebRefresher{Client: func(context.Context) (*http.Client, func(), error) { return lease.Client(), nil, nil }}
 	personal, err := sessionStore.Ensure(ctx, uuid.MustParse(target.TargetAccountID), refresher, false, nil)
 	if err != nil || personal.Status != "ready" {

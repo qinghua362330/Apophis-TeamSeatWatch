@@ -109,7 +109,7 @@ func (w *Worker) runDeliveryReclaim(ctx context.Context, item Task, lease *egres
 	// A fresh browser context is required for the password/TOTP leg while the
 	// HTTP transport remains lease-bound to the same egress route.
 	lease.Client().Jar = nil
-	environment, err := (accountsession.Store{Pool: w.Store.pool, KeyRing: w.Store.keyRing}).Environment(ctx, uuid.MustParse(target.TargetAccountID))
+	environment, err := (accountsession.Store{Pool: w.Store.pool, KeyRing: w.Store.keyRing, Routes: w.AccountRoutes}).Environment(ctx, uuid.MustParse(target.TargetAccountID))
 	if err != nil {
 		return err
 	}

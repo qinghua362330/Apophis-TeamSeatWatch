@@ -29,6 +29,22 @@ func (h *OwnerAuthHandler) cpaReplacementCredential(ctx context.Context, action 
 	if err != nil {
 		return cpacred.Credential{}, err
 	}
+	if h.targetRoutes != nil {
+		enabled, err := h.targetRoutes.Enabled(ctx)
+		if err != nil {
+			return cpacred.Credential{}, err
+		}
+		if enabled {
+			var current bool
+			err = h.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM tsw_account_route_bindings b JOIN tsw_batch_memberships m ON m.target_account_id=b.target_account_id JOIN tsw_oauth_assets a ON a.membership_id=m.id JOIN tsw_delivery_versions v ON v.id=a.current_delivery_version_id WHERE b.target_account_id=$1 AND NOT b.paused AND v.created_at>=b.created_at)`, target).Scan(&current)
+			if err != nil {
+				return cpacred.Credential{}, err
+			}
+			if !current {
+				return cpacred.Credential{}, errors.New("CPA source predates account proxy binding")
+			}
+		}
+	}
 	type checkpoint struct {
 		Credential     cpacred.Credential
 		SecretRevision int64
@@ -43,10 +59,16 @@ func (h *OwnerAuthHandler) cpaReplacementCredential(ctx context.Context, action 
 		if json.Unmarshal([]byte(raw), &saved) != nil || saved.SecretRevision != revision || saved.Workspace != workspace || saved.Credential.Name != source.Name || saved.Credential.Email != source.Email || deliveryRevision == nil || saved.Credential.Revision != *deliveryRevision {
 			return cpacred.Credential{}, errors.New("CPA credential checkpoint no longer matches replacement")
 		}
+		if err := h.verifyCPARoute(ctx, target, saved.Credential); err != nil {
+			return cpacred.Credential{}, err
+		}
 		return saved.Credential, nil
 	}
-	credential, err := h.cpaProxyAssignment(ctx, source)
+	credential, err := h.cpaProxyAssignment(ctx, target, source)
 	if err != nil {
+		return cpacred.Credential{}, err
+	}
+	if err := h.verifyCPARoute(ctx, target, credential); err != nil {
 		return cpacred.Credential{}, err
 	}
 	saved = checkpoint{credential, revision, workspace}

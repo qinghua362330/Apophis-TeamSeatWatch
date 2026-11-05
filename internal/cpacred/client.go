@@ -9,6 +9,7 @@ package cpacred
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -58,6 +59,7 @@ type File struct {
 	Email         string
 	AccountID     string
 	Revision      string
+	ProxyDigest   string
 	Status        string
 	StatusMessage string
 	LastError     string
@@ -288,12 +290,18 @@ func (c *Client) CredentialIdentity(ctx context.Context, name string) (File, err
 		return File{}, err
 	}
 	var metadata struct {
-		Type string `json:"type"`
+		Type     string `json:"type"`
+		ProxyURL string `json:"proxy_url"`
 	}
 	if json.Unmarshal(raw, &metadata) != nil || metadata.Type != "codex" {
 		return File{}, ErrCredentialIdentityMismatch
 	}
-	return File{Name: name, Provider: "codex", Email: identity.email, AccountID: identity.accountID, Revision: identity.revision}, nil
+	file := File{Name: name, Provider: "codex", Email: identity.email, AccountID: identity.accountID, Revision: identity.revision}
+	if proxy := strings.TrimSpace(metadata.ProxyURL); proxy != "" {
+		digest := sha256.Sum256([]byte(proxy))
+		file.ProxyDigest = hex.EncodeToString(digest[:])
+	}
+	return file, nil
 }
 
 // Lookup resolves one credential selector (file name or auth index) to a file.

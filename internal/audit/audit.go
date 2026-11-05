@@ -40,7 +40,9 @@ const (
 	TaskEnded                      EventType = "task.ended"
 	TaskRejected                   EventType = "task.rejected"
 	TaskInterrupted                EventType = "task.interrupted"
+	TaskRouteBound                 EventType = "task.route_bound"
 	TargetProbeStarted             EventType = "target_probe.started"
+	TargetProbeRouteBound          EventType = "target_probe.route_bound"
 	TargetProbeEnded               EventType = "target_probe.ended"
 	TargetProbeRejected            EventType = "target_probe.rejected"
 	TargetProbeInterrupted         EventType = "target_probe.interrupted"
@@ -369,7 +371,9 @@ var registry = map[EventType]spec{
 	TaskEnded:                      {ActorSystem, "task", []Outcome{OutcomeSucceeded, OutcomeFailed}, "task", "workspace"},
 	TaskRejected:                   {ActorSystem, "task", []Outcome{OutcomeDenied, OutcomeFailed}, "task", "workspace"},
 	TaskInterrupted:                {ActorSystem, "task", []Outcome{OutcomeFailed}, "task", "workspace"},
+	TaskRouteBound:                 {ActorSystem, "task", []Outcome{OutcomeSucceeded}, "task", "workspace"},
 	TargetProbeStarted:             {ActorSystem, "task", []Outcome{OutcomeSucceeded}, "task", "target_account"},
+	TargetProbeRouteBound:          {ActorSystem, "task", []Outcome{OutcomeSucceeded}, "task", "target_account"},
 	TargetProbeEnded:               {ActorSystem, "task", []Outcome{OutcomeSucceeded, OutcomeFailed}, "task", "target_account"},
 	TargetProbeRejected:            {ActorSystem, "task", []Outcome{OutcomeDenied, OutcomeFailed}, "task", "target_account"},
 	TargetProbeInterrupted:         {ActorSystem, "task", []Outcome{OutcomeFailed}, "task", "target_account"},

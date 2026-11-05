@@ -81,7 +81,7 @@ func (w *Worker) runWorkspaceAuthorization(ctx context.Context, item Task, lease
 	if err != nil {
 		return w.finishJoin(ctx, item, target, "blocked", "platform_configuration_invalid", "platform_configuration_invalid", "oauth_login", nil)
 	}
-	sessions := accountsession.Store{Pool: w.Store.pool, KeyRing: w.Store.keyRing}
+	sessions := accountsession.Store{Pool: w.Store.pool, KeyRing: w.Store.keyRing, Routes: w.AccountRoutes}
 	refresher := platform.PersonalWebRefresher{Client: func(context.Context) (*http.Client, func(), error) { return lease.Client(), nil, nil }}
 	personal, err := sessions.Ensure(ctx, uuid.MustParse(target.TargetID), refresher, false, nil)
 	if err != nil || personal.Status != "ready" {

@@ -19,6 +19,15 @@ import (
 var ErrDisabled = errors.New("account disabled")
 var ErrChanged = errors.New("account session reservation superseded")
 
+// RouteProvider binds all browser and API traffic for a target account to the
+// same measured egress lease. It is structural to keep accountsession
+// independent from the route implementation.
+type RouteProvider interface {
+	Prepare(context.Context, uuid.UUID) (context.Context, bool, func(), error)
+	Validate(context.Context, uuid.UUID) error
+	Published(context.Context, pgx.Tx, uuid.UUID) error
+}
+
 // Environment resolves identity for the existing reclaim reservation, whose
 // full-login adapter owns authentication. It uses the same active-account lock
 // and lazy assignment as Ensure, without changing any encrypted generation.
@@ -49,6 +58,7 @@ const InvalidATSQL = `EXISTS (SELECT 1 FROM tsw_personal_probe_items item WHERE 
 type Store struct {
 	Pool    *pgxpool.Pool
 	KeyRing auth.KeyRing
+	Routes  RouteProvider
 }
 type Result struct {
 	Environment browserenv.Environment
@@ -68,7 +78,13 @@ type reservation struct {
 // fresh is used only after a browser authorization explicitly rejects its session.
 // published runs in the successful publication transaction (e.g. Owner rotation).
 func (s Store) Ensure(ctx context.Context, id uuid.UUID, adapter platform.PersonalSessionRefresher, fresh bool, published func(pgx.Tx) error) (Result, error) {
-	r, err := s.reserve(ctx, id, fresh)
+	routeCtx, routeFresh, release, err := s.prepareRoute(ctx, id)
+	if err != nil {
+		return Result{}, err
+	}
+	defer release()
+	fresh = fresh || routeFresh
+	r, err := s.reserve(routeCtx, id, fresh)
 	if err != nil {
 		return Result{}, err
 	}
@@ -83,9 +99,9 @@ func (s Store) Ensure(ctx context.Context, id uuid.UUID, adapter platform.Person
 			adapter = platform.UnavailablePersonalRefresh{}
 		}
 		if fresh {
-			result, err = adapter.RefreshPersonal(ctx, r.material)
+			result, err = adapter.RefreshPersonal(routeCtx, r.material)
 		} else {
-			result, err = platform.AcquirePersonal(ctx, adapter, r.material, r.saved)
+			result, err = platform.AcquirePersonal(routeCtx, adapter, r.material, r.saved)
 		}
 		switch {
 		case errors.Is(err, platform.ErrPersonalRefreshUnavailable):
@@ -94,12 +110,38 @@ func (s Store) Ensure(ctx context.Context, id uuid.UUID, adapter platform.Person
 			result = platform.PersonalRefreshResult{Status: "refresh_failed"}
 		}
 	}
-	publishCtx, stopPublish := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	if result.Status == "ready" && s.Routes != nil {
+		if err = s.Routes.Validate(routeCtx, id); err != nil {
+			return Result{}, err
+		}
+	}
+	publishCtx, stopPublish := context.WithTimeout(context.WithoutCancel(routeCtx), 5*time.Second)
 	defer stopPublish()
-	if err = s.publish(publishCtx, id, r, result, published); err != nil {
+	if err = s.publish(publishCtx, id, r, result, func(tx pgx.Tx) error {
+		if s.Routes != nil {
+			if err := s.Routes.Published(publishCtx, tx, id); err != nil {
+				return err
+			}
+		}
+		if published != nil {
+			return published(tx)
+		}
+		return nil
+	}); err != nil {
 		return Result{}, err
 	}
 	return Result{Environment: r.material.Environment, Status: result.Status, Session: result.Session, Failure: result.Failure}, nil
+}
+
+func (s Store) prepareRoute(ctx context.Context, id uuid.UUID) (context.Context, bool, func(), error) {
+	if s.Routes == nil {
+		return ctx, false, func() {}, nil
+	}
+	routeCtx, fresh, release, err := s.Routes.Prepare(ctx, id)
+	if release == nil {
+		release = func() {}
+	}
+	return routeCtx, fresh, release, err
 }
 
 func lockOwnerAction(ctx context.Context, tx pgx.Tx) error {

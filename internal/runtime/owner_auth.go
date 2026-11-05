@@ -17,6 +17,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	openapi_types "github.com/oapi-codegen/runtime/types"
+	"github.com/xft0202/Apophis-TeamSeatWatch/internal/accountroute"
 	"github.com/xft0202/Apophis-TeamSeatWatch/internal/audit"
 	"github.com/xft0202/Apophis-TeamSeatWatch/internal/auth"
 	"github.com/xft0202/Apophis-TeamSeatWatch/internal/cpacred"
@@ -74,9 +75,10 @@ type OwnerAuthHandler struct {
 	cpaWebhookSecret           []byte
 	// cpaCredentials is nil unless the deployment attaches CPA management. A nil
 	// port keeps every remote CPA step disabled rather than partially executed.
+	targetRoutes       *accountroute.Store
 	cpaCredentials     cpaCredentialPort
 	cpaOAuthIssuer     func(context.Context, uuid.UUID, string, string, string) (cpacred.Credential, error)
-	cpaProxyAssignment func(context.Context, cpacred.Credential) (cpacred.Credential, error)
+	cpaProxyAssignment func(context.Context, uuid.UUID, cpacred.Credential) (cpacred.Credential, error)
 }
 
 type ownerContext struct {
@@ -117,6 +119,7 @@ type OwnerControl struct {
 	http.Handler
 	Joiner           task.JoinerFactory
 	OperationRemover task.OperationRemoverFactory
+	TargetRoutes     *accountroute.Store
 }
 
 // NewOwnerAuthHandler builds the Owner routes and their database pool.
@@ -167,6 +170,7 @@ func NewOwnerAuthHandler(config OwnerAuthConfig) (*OwnerControl, func(), error) 
 		secureCookies:           config.Origins.SecureCookies(),
 		cpaWebhookSecret:        []byte(config.CPAWebhookSecret),
 	}
+	handler.targetRoutes = &accountroute.Store{Pool: pool, KeyRing: config.KeyRing, Manager: config.Egress}
 	// An unattached CPA management endpoint leaves every remote stage off rather
 	// than running half of one.
 	if credentialClient, credentialErr := cpacred.New(cpacred.Config{BaseURL: config.CPAManagementURL, APIKey: config.CPAManagementKey}); credentialErr == nil {
@@ -179,6 +183,20 @@ func NewOwnerAuthHandler(config OwnerAuthConfig) (*OwnerControl, func(), error) 
 	proxyDone := make(chan struct{})
 	cpaAutomationDone := make(chan struct{})
 	handler.rotationJoinEgress = func(ctx context.Context) (rotationJoinEgress, error) {
+		if target := egress.Target(ctx); target != "" && handler.targetRoutes != nil {
+			if borrowed, ok := egress.BorrowedLease(ctx, target); ok {
+				return borrowedTargetRoute{borrowed}, nil
+			}
+			if enabled, err := handler.targetRoutes.Enabled(ctx); err != nil {
+				return nil, err
+			} else if enabled {
+				id, err := uuid.Parse(target)
+				if err != nil {
+					return nil, err
+				}
+				return handler.targetRoutes.Acquire(ctx, id)
+			}
+		}
 		if handler.egress == nil {
 			return nil, platform.ErrRotationJoinUnavailable
 		}
@@ -200,6 +218,34 @@ func NewOwnerAuthHandler(config OwnerAuthConfig) (*OwnerControl, func(), error) 
 		cancelService()
 		pool.Close()
 		return nil, func() {}, err
+	}
+	if enabled, err := handler.targetRoutes.Enabled(runtimeContext); err != nil {
+		cancelService()
+		pool.Close()
+		return nil, func() {}, err
+	} else if enabled {
+		// PinLease needs admitted candidates even when generic work uses direct mode.
+		if _, err := handler.proxyPool.verifyLocked(runtimeContext, false, ""); err != nil {
+			cancelService()
+			pool.Close()
+			return nil, func() {}, err
+		}
+	}
+	// Existing CPA accounts must adopt their current proxy before workers start.
+	if enabled, err := handler.targetRoutes.Enabled(runtimeContext); err != nil {
+		cancelService()
+		pool.Close()
+		return nil, func() {}, err
+	} else if enabled && handler.cpaCredentials != nil {
+		files, err := handler.cpaCredentials.List(runtimeContext)
+		if err == nil {
+			err = handler.reconcileCPATargetRoutes(runtimeContext, files)
+		}
+		if err != nil {
+			cancelService()
+			pool.Close()
+			return nil, func() {}, err
+		}
 	}
 	go func() {
 		defer close(proxyDone)
@@ -237,7 +283,7 @@ func NewOwnerAuthHandler(config OwnerAuthConfig) (*OwnerControl, func(), error) 
 		w.Header().Set("Cache-Control", "no-store")
 		ownerHandler.ServeHTTP(w, r)
 	})
-	return &OwnerControl{Handler: noStore, Joiner: handler.operationJoiner, OperationRemover: handler.operationRemover}, func() {
+	return &OwnerControl{Handler: noStore, Joiner: handler.operationJoiner, OperationRemover: handler.operationRemover, TargetRoutes: handler.targetRoutes}, func() {
 		cancelService()
 		<-proxyDone
 		<-cpaAutomationDone

@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -27,6 +28,14 @@ func (h *OwnerAuthHandler) acquireCPAOAuth(ctx context.Context, targetID uuid.UU
 		return cpacred.Credential{}, errors.New("CPA OAuth renewal identity is incomplete")
 	}
 
+	if h.targetRoutes != nil {
+		routed, _, release, routeErr := h.targetRoutes.Prepare(ctx, targetID)
+		if routeErr != nil {
+			return cpacred.Credential{}, routeErr
+		}
+		defer release()
+		ctx = routed
+	}
 	// Read the complete sealed material under one revision. The revision is
 	// checked again immediately before and after the remote grant below.
 	var identifier string
@@ -59,12 +68,16 @@ WHERE a.id=$1 AND a.status='active' AND c.material_status='complete' AND c.mater
 		return cpacred.Credential{}, err
 	}
 
-	session, err := (accountsession.Store{Pool: h.pool, KeyRing: h.keyRing}).Ensure(ctx, targetID, h.personalRefresh, false, nil)
+	session, err := (accountsession.Store{Pool: h.pool, KeyRing: h.keyRing, Routes: h.accountRoutes()}).Ensure(ctx, targetID, h.personalRefresh, false, nil)
 	if err != nil {
 		return cpacred.Credential{}, err
 	}
 	if session.Status != "ready" {
-		return cpacred.Credential{}, errors.New("personal session refresh unavailable")
+		code := session.Status
+		if session.Failure != nil {
+			code += ":" + session.Failure.Code
+		}
+		return cpacred.Credential{}, fmt.Errorf("personal session refresh unavailable: %s", code)
 	}
 	route, err := h.rotationJoinEgress(ctx)
 	if err != nil {
@@ -110,7 +123,7 @@ WHERE a.id=$1 AND a.status='active' AND c.material_status='complete' AND c.mater
 	}
 	oauth, err := reader.CreateDeliveryCredentials(ctx, request)
 	if errors.Is(err, platform.ErrBrowserSessionExpired) {
-		fresh, refreshErr := (accountsession.Store{Pool: h.pool, KeyRing: h.keyRing}).Ensure(ctx, targetID, h.personalRefresh, true, nil)
+		fresh, refreshErr := (accountsession.Store{Pool: h.pool, KeyRing: h.keyRing, Routes: h.accountRoutes()}).Ensure(ctx, targetID, h.personalRefresh, true, nil)
 		if refreshErr != nil {
 			return cpacred.Credential{}, refreshErr
 		}
@@ -143,6 +156,18 @@ WHERE a.id=$1 AND a.status='active' AND c.material_status='complete' AND c.mater
 		return cpacred.Credential{}, errors.New("CPA OAuth identity mismatch")
 	}
 	credential.Name = name
+	if h.targetRoutes != nil {
+		if err := h.targetRoutes.Validate(ctx, targetID); err != nil {
+			return cpacred.Credential{}, err
+		}
+		enabled, err := h.targetRoutes.Enabled(ctx)
+		if err != nil {
+			return cpacred.Credential{}, err
+		}
+		if enabled {
+			return h.targetRoutes.WithCredential(ctx, targetID, credential)
+		}
+	}
 	return credential, nil
 }
 

@@ -30,7 +30,9 @@ type Credential struct {
 	AuthFile []byte
 	// Revision identifies the delivered material, never the token itself.
 	Revision string
-	Email    string
+	// RouteGeneration fences the sealed retry checkpoint; it is never uploaded.
+	RouteGeneration string
+	Email           string
 }
 
 // BuildCodexPATCredential renders the long-lived personal access token format

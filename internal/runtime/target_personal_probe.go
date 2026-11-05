@@ -19,6 +19,7 @@ import (
 type SavedTargetPersonalProbe struct {
 	Pool    *pgxpool.Pool
 	KeyRing auth.KeyRing
+	Routes  accountsession.RouteProvider
 	Adapter platform.PersonalUsageProbe
 }
 
@@ -26,6 +27,17 @@ func (p SavedTargetPersonalProbe) ProbePersonal(ctx context.Context, targetID st
 	id, err := uuid.Parse(targetID)
 	if err != nil || p.Pool == nil || p.KeyRing == nil {
 		return platform.PersonalProbeEvidence{}, task.ErrPersonalCredentialMissing
+	}
+	if p.Routes != nil {
+		routed, fresh, release, routeErr := p.Routes.Prepare(ctx, id)
+		if routeErr != nil {
+			return platform.PersonalProbeEvidence{}, routeErr
+		}
+		defer release()
+		ctx = routed
+		if fresh {
+			return platform.PersonalProbeEvidence{}, task.ErrPersonalCredentialMissing
+		}
 	}
 	var revision int64
 	var generation uuid.UUID
@@ -45,6 +57,11 @@ func (p SavedTargetPersonalProbe) ProbePersonal(ctx context.Context, targetID st
 		return platform.PersonalProbeEvidence{}, task.ErrPersonalCredentialMissing
 	}
 	evidence, err := p.Adapter.Probe(ctx, session)
+	if p.Routes != nil {
+		if routeErr := p.Routes.Validate(ctx, id); routeErr != nil {
+			return platform.PersonalProbeEvidence{}, routeErr
+		}
+	}
 	evidence.SessionGeneration, evidence.SessionRevision = generation.String(), revision
 	return evidence, err
 }

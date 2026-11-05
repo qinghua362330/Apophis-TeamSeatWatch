@@ -237,6 +237,11 @@ func (h *OwnerAuthHandler) dispatchRotationCandidateJoin(ctx context.Context, ow
 		return err
 	}
 	defer gate.close()
+	bounded, releaseTargetRoute, routeBindErr := h.manualTargetRoute(bounded, i.candidateAccountID)
+	if routeBindErr != nil {
+		return routeBindErr
+	}
+	defer releaseTargetRoute()
 	route, err := h.rotationJoinEgress(bounded)
 	if err != nil {
 		return platform.ErrRotationJoinUnavailable

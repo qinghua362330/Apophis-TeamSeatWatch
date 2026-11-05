@@ -119,6 +119,11 @@ func (h *OwnerAuthHandler) reconcileRotationJoinMembership(ctx context.Context, 
 		return err
 	}
 	defer gate.close()
+	bounded, releaseTargetRoute, routeBindErr := h.manualTargetRoute(bounded, i.candidateAccountID)
+	if routeBindErr != nil {
+		return routeBindErr
+	}
+	defer releaseTargetRoute()
 	route, err := h.rotationJoinEgress(bounded)
 	if route != nil {
 		defer route.Release()

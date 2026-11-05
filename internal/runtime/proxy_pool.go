@@ -112,7 +112,11 @@ func (p *proxyControl) maintainLocked(ctx context.Context, force bool) (ownerapi
 	if err := p.retireLocked(ctx); err != nil {
 		return ownerapi.ProxyPool{}, err
 	}
-	if p.egress != nil && p.egress.Status().Policy == egress.ModeDirect {
+	var accountRoutesEnabled bool
+	if err := p.pool.QueryRow(ctx, `SELECT enabled FROM public.tsw_account_route_settings WHERE id=true`).Scan(&accountRoutesEnabled); err != nil {
+		return ownerapi.ProxyPool{}, err
+	}
+	if p.egress != nil && p.egress.Status().Policy == egress.ModeDirect && !accountRoutesEnabled {
 		return p.view(ctx)
 	}
 	if _, err := p.verifyLocked(ctx, false, ""); err != nil {
@@ -425,6 +429,11 @@ func (p *proxyControl) retireLocked(ctx context.Context) error {
 	if _, err := p.pool.Exec(ctx, `UPDATE tsw_proxy_pool_nodes SET retired=true,state='isolated',failure_reason='proxy_session_expired' WHERE NOT retired AND stable_until<=now()+interval '2 minutes'`); err != nil {
 		return err
 	}
+	// A route binding is durable account state. Retiring its node pauses the
+	// account and deliberately keeps the node row for audit/reconciliation.
+	if _, err := p.pool.Exec(ctx, `UPDATE public.tsw_account_route_bindings SET paused=true,paused_reason='proxy_retired',updated_at=now() WHERE node_id IN (SELECT id FROM public.tsw_proxy_pool_nodes WHERE retired)`); err != nil {
+		return err
+	}
 	rows, err := p.pool.Query(ctx, `SELECT id FROM tsw_proxy_pool_nodes WHERE retired`)
 	if err != nil {
 		return err
@@ -444,6 +453,13 @@ func (p *proxyControl) retireLocked(ctx context.Context) error {
 		return err
 	}
 	for _, id := range ids {
+		var bound bool
+		if err := p.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM public.tsw_account_route_bindings WHERE node_id=$1)`, id).Scan(&bound); err != nil {
+			return err
+		}
+		if bound {
+			continue
+		}
 		remove := func() error {
 			_, err := p.pool.Exec(ctx, `DELETE FROM tsw_proxy_pool_nodes WHERE id=$1`, id)
 			return err
@@ -480,6 +496,13 @@ func (p *proxyControl) removeNode(ctx context.Context, id openapi_types.UUID) (o
 	p.refresh.Lock()
 	defer p.refresh.Unlock()
 	remove := func() error {
+		var bound bool
+		if err := p.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM public.tsw_account_route_bindings WHERE node_id=$1)`, uuid.UUID(id)).Scan(&bound); err != nil {
+			return err
+		}
+		if bound {
+			return egress.ErrNodeInUse
+		}
 		_, err := p.pool.Exec(ctx, `DELETE FROM tsw_proxy_pool_nodes WHERE id=$1`, uuid.UUID(id))
 		return err
 	}

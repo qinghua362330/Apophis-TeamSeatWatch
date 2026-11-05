@@ -2,8 +2,10 @@ package egress
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"sync"
+	"time"
 )
 
 // LeaseProvider is the narrow, already-verified route required by a platform attempt.
@@ -58,6 +60,152 @@ func (m *Manager) Acquire(ctx context.Context) (*Lease, error) {
 		case <-changed:
 		}
 	}
+}
+
+// PinLease converts one acquired lease into an exact admitted node lease while
+// preserving its single global capacity reservation. A busy target is waited
+// for without acquiring a second slot, so a limit of one cannot deadlock.
+func (m *Manager) PinLease(ctx context.Context, outer *Lease, nodeID string, expectedFP []byte) (*Lease, error) {
+	if m == nil || m.pool == nil || outer == nil || outer.manager != m.pool || nodeID == "" {
+		return nil, ErrLeaseExhausted
+	}
+	if len(expectedFP) != 0 && len(expectedFP) != 32 {
+		return nil, ErrEgressDrift
+	}
+	outer.mu.Lock()
+	if outer.released {
+		outer.mu.Unlock()
+		return nil, ErrLeaseReleased
+	}
+	oldMode, oldCandidate, oldFP, oldClient := outer.mode, outer.candidate, outer.fingerprint, outer.client
+	outer.mu.Unlock()
+	converted := false
+	for {
+		m.mu.RLock()
+		changed := m.capacity
+		m.mu.RUnlock()
+		m.pool.mu.Lock()
+		if !converted {
+			if oldMode == ModeRequired {
+				delete(m.pool.active, oldFP)
+				m.pool.directActive++
+			}
+			converted = true
+			m.capacityChanged()
+		}
+		var target *Candidate
+		busy := false
+		for index := range m.pool.candidates {
+			candidate := m.pool.candidates[index]
+			if candidate.ID != nodeID {
+				continue
+			}
+			if len(expectedFP) != 0 && subtle.ConstantTimeCompare(candidate.Fingerprint[:], expectedFP) != 1 {
+				m.pool.mu.Unlock()
+				m.restorePinReservation(outer, oldMode, oldCandidate, oldFP)
+				return nil, ErrEgressDrift
+			}
+			if !candidate.endpoint.StableUntil.IsZero() && time.Until(candidate.endpoint.StableUntil) < stableWindow(ctx) {
+				continue
+			}
+			if _, used := m.pool.active[candidate.Fingerprint]; used || m.pool.pinning[candidate.Fingerprint] {
+				busy = true
+				continue
+			}
+			copy := candidate
+			target = &copy
+			break
+		}
+		if target == nil {
+			m.pool.mu.Unlock()
+			if !busy {
+				m.restorePinReservation(outer, oldMode, oldCandidate, oldFP)
+				return nil, ErrTargetNotFound
+			}
+			select {
+			case <-ctx.Done():
+				m.restorePinReservation(outer, oldMode, oldCandidate, oldFP)
+				return nil, ctx.Err()
+			case <-changed:
+			}
+			continue
+		}
+		if m.pool.pinning == nil {
+			m.pool.pinning = make(map[[32]byte]bool)
+		}
+		m.pool.pinning[target.Fingerprint] = true
+		m.pool.mu.Unlock()
+
+		client, err := m.router.ClientFor(*target)
+		var candidateLease *Lease
+		if err == nil {
+			candidateLease = &Lease{manager: m.pool, candidate: *target, client: client, mode: ModeRequired, fingerprint: target.Fingerprint, verifiedAt: target.VerifiedAt}
+			if !target.endpoint.StableUntil.IsZero() {
+				candidateLease.client.Transport = sessionTransport{next: candidateLease.client.Transport, until: target.endpoint.StableUntil}
+			}
+			err = candidateLease.Remeasure(ctx)
+		}
+		if err == nil {
+			outer.mu.Lock()
+			m.pool.mu.Lock()
+			delete(m.pool.pinning, target.Fingerprint)
+			m.pool.directActive--
+			m.pool.active[target.Fingerprint] = *target
+			outer.mode, outer.candidate, outer.client, outer.fingerprint, outer.verifiedAt = candidateLease.mode, candidateLease.candidate, candidateLease.client, candidateLease.fingerprint, candidateLease.verifiedAt
+			m.pool.mu.Unlock()
+			outer.mu.Unlock()
+			m.capacityChanged()
+			if oldClient != nil && oldClient != candidateLease.client {
+				oldClient.CloseIdleConnections()
+				m.router.forgetClient(oldClient)
+			}
+			return outer, nil
+		}
+		if candidateLease != nil && candidateLease.client != nil {
+			candidateLease.client.CloseIdleConnections()
+			m.router.forgetClient(candidateLease.client)
+		}
+		m.pool.mu.Lock()
+		delete(m.pool.pinning, target.Fingerprint)
+		m.pool.mu.Unlock()
+		m.restorePinReservation(outer, oldMode, oldCandidate, oldFP)
+		m.capacityChanged()
+		return nil, err
+	}
+}
+
+func (m *Manager) restorePinReservation(outer *Lease, oldMode Mode, oldCandidate Candidate, oldFP [32]byte) {
+	outer.mu.Lock()
+	m.pool.mu.Lock()
+	if oldMode == ModeRequired && m.poolHasCandidateLocked(oldCandidate) {
+		if _, occupied := m.pool.active[oldFP]; occupied {
+			outer.mode = ModeDirect
+			outer.candidate = Candidate{}
+			outer.fingerprint = [32]byte{}
+			outer.verifiedAt = time.Time{}
+			m.pool.mu.Unlock()
+			outer.mu.Unlock()
+			return
+		}
+		m.pool.active[oldFP] = oldCandidate
+		m.pool.directActive--
+	} else if oldMode == ModeRequired {
+		outer.mode = ModeDirect
+		outer.candidate = Candidate{}
+		outer.fingerprint = [32]byte{}
+		outer.verifiedAt = time.Time{}
+	}
+	m.pool.mu.Unlock()
+	outer.mu.Unlock()
+}
+
+func (m *Manager) poolHasCandidateLocked(candidate Candidate) bool {
+	for _, available := range m.pool.candidates {
+		if available.ID == candidate.ID && available.Fingerprint == candidate.Fingerprint {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *Manager) ActiveCount() int {

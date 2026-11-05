@@ -521,6 +521,18 @@ func TestPATUploadVerifiesActualAuthorizationMaterial(t *testing.T) {
 	if identity.AccountID != "workspace-fixture" || identity.Revision != credential.Revision {
 		t.Fatal("authoritative identity mismatch")
 	}
+	proxied, err := WithProxy(credential, "socks5h://127.0.0.1:19082")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = client.Upload(t.Context(), proxied.Name, proxied.AuthFile); err != nil {
+		t.Fatal(err)
+	}
+	observed, err := client.CredentialIdentity(t.Context(), proxied.Name)
+	if err != nil || observed.ProxyDigest == "" {
+		t.Fatalf("proxy identity missing: %v", err)
+	}
+
 	fake.mu.Lock()
 	fake.authorizationOverride = "wrong-pat-fixture"
 	fake.mu.Unlock()

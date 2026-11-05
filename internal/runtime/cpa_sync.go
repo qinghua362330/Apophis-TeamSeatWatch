@@ -59,6 +59,9 @@ func (h *OwnerAuthHandler) syncCPACredentialInventory(ctx context.Context) (int,
 	if err != nil {
 		return 0, err
 	}
+	if err := h.reconcileCPATargetRoutes(syncCtx, files); err != nil {
+		return 0, err
+	}
 	tx, err := h.pool.Begin(ctx)
 	if err != nil {
 		return 0, err

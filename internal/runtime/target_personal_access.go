@@ -38,7 +38,7 @@ func (h *OwnerAuthHandler) RefreshTargetPersonalAccess(w http.ResponseWriter, r 
 	ctx, stopTask := h.personalRefreshContext(r.Context())
 	defer stopTask()
 	r = r.WithContext(ctx)
-	result, err := (accountsession.Store{Pool: h.pool, KeyRing: h.keyRing}).Ensure(ctx, id, h.personalRefresh, false, func(tx pgx.Tx) error {
+	result, err := (accountsession.Store{Pool: h.pool, KeyRing: h.keyRing, Routes: h.accountRoutes()}).Ensure(ctx, id, h.personalRefresh, false, func(tx pgx.Tx) error {
 		return h.lockCurrentOwnerSession(ctx, tx, owner)
 	})
 	switch {

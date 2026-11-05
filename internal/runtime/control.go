@@ -76,6 +76,11 @@ func NewControlHandlers(config ControlConfig) (ControlHandlers, error) {
 	}
 	// Each explicit Owner action acquires its own admitted route; startup performs no login or discovery.
 	leaseClient := func(ctx context.Context) (*http.Client, func(), error) {
+		if target := egress.Target(ctx); target != "" {
+			if borrowed, ok := egress.BorrowedLease(ctx, target); ok {
+				return borrowed.Client(), func() {}, nil
+			}
+		}
 		lease, err := config.Egress.Acquire(ctx)
 		if err != nil {
 			return nil, nil, err
@@ -109,7 +114,7 @@ func NewControlHandlers(config ControlConfig) (ControlHandlers, error) {
 	}
 	workspaceWorker := &task.Worker{
 		Store: task.NewStore(workerPool, keyRing), Facts: workspace.NewService(workerPool, keyRing), Targets: targetdomain.NewService(),
-		Egress: config.Egress, ID: "workspace-reader-1", PersonalProber: SavedTargetPersonalProbe{Pool: workerPool, KeyRing: keyRing, Adapter: platform.PersonalUsageProbe{Client: leaseClient}},
+		TargetRoutes: ownerAuth.TargetRoutes, AccountRoutes: ownerAuth.TargetRoutes, Egress: config.Egress, ID: "workspace-reader-1", PersonalProber: SavedTargetPersonalProbe{Pool: workerPool, KeyRing: keyRing, Routes: ownerAuth.TargetRoutes, Adapter: platform.PersonalUsageProbe{Client: leaseClient}},
 		TargetProber: func(client *http.Client, credentials platform.Credentials) (*platform.HTTPReader, error) {
 			return platformConfig.Reader(client, credentials)
 		},
