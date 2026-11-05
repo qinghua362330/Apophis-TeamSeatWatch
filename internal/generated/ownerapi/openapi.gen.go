@@ -2187,6 +2187,7 @@ func (e SelectedWorkspaceMemberLatestVerification) Valid() bool {
 // Defines values for SelectedWorkspaceMemberPermission.
 const (
 	SelectedWorkspaceMemberPermissionDenied  SelectedWorkspaceMemberPermission = "denied"
+	SelectedWorkspaceMemberPermissionManage  SelectedWorkspaceMemberPermission = "manage"
 	SelectedWorkspaceMemberPermissionRead    SelectedWorkspaceMemberPermission = "read"
 	SelectedWorkspaceMemberPermissionUnknown SelectedWorkspaceMemberPermission = "unknown"
 )
@@ -2195,6 +2196,8 @@ const (
 func (e SelectedWorkspaceMemberPermission) Valid() bool {
 	switch e {
 	case SelectedWorkspaceMemberPermissionDenied:
+		return true
+	case SelectedWorkspaceMemberPermissionManage:
 		return true
 	case SelectedWorkspaceMemberPermissionRead:
 		return true
@@ -2292,6 +2295,7 @@ func (e SelectedWorkspaceVerificationCompleteness) Valid() bool {
 // Defines values for SelectedWorkspaceVerificationPermission.
 const (
 	SelectedWorkspaceVerificationPermissionDenied  SelectedWorkspaceVerificationPermission = "denied"
+	SelectedWorkspaceVerificationPermissionManage  SelectedWorkspaceVerificationPermission = "manage"
 	SelectedWorkspaceVerificationPermissionRead    SelectedWorkspaceVerificationPermission = "read"
 	SelectedWorkspaceVerificationPermissionUnknown SelectedWorkspaceVerificationPermission = "unknown"
 )
@@ -2300,6 +2304,8 @@ const (
 func (e SelectedWorkspaceVerificationPermission) Valid() bool {
 	switch e {
 	case SelectedWorkspaceVerificationPermissionDenied:
+		return true
+	case SelectedWorkspaceVerificationPermissionManage:
 		return true
 	case SelectedWorkspaceVerificationPermissionRead:
 		return true

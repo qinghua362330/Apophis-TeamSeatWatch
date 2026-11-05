@@ -32,6 +32,7 @@ test('verified facts need current, complete read evidence', () => {
     assert.equal(canShowWorkspaceFacts({ ...fact, status }, now), false, status);
   }
   assert.equal(canShowWorkspaceFacts({ ...fact, permission: 'read' }, now), true, 'read success proves facts, not write authority');
+  assert.equal(canShowWorkspaceFacts({ ...fact, permission: 'manage' }, now), true, 'manage evidence also proves readable facts');
   for (const permission of ['denied', 'unknown']) {
     assert.equal(canShowWorkspaceFacts({ ...fact, permission }, now), false, permission);
   }

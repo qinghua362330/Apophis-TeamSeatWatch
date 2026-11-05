@@ -2579,7 +2579,7 @@ export interface components {
             /** @enum {string} */
             status: "pending" | "verifying" | "verified" | "partial" | "failed" | "permission_denied" | "stale";
             /** @enum {string} */
-            permission: "read" | "denied" | "unknown";
+            permission: "read" | "manage" | "denied" | "unknown";
             /** @enum {string} */
             completeness: "complete" | "partial" | "unknown";
             source?: string;
@@ -2645,7 +2645,7 @@ export interface components {
             /** @enum {string} */
             completeness: "complete" | "partial" | "unknown";
             /** @enum {string} */
-            permission: "read" | "denied" | "unknown";
+            permission: "read" | "manage" | "denied" | "unknown";
             /** @enum {string} */
             latestVerification: "verified" | "pending";
         };

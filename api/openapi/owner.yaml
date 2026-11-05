@@ -4897,7 +4897,7 @@ components:
             - stale
         permission:
           type: string
-          enum: [read, denied, unknown]
+          enum: [read, manage, denied, unknown]
         completeness:
           type: string
           enum: [complete, partial, unknown]
@@ -5013,7 +5013,7 @@ components:
           enum: [complete, partial, unknown]
         permission:
           type: string
-          enum: [read, denied, unknown]
+          enum: [read, manage, denied, unknown]
         latestVerification:
           type: string
           enum: [verified, pending]

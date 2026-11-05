@@ -22,7 +22,7 @@ export function workspaceSubscriptionState(fact: Verification | null, access: Wo
 
 export function canShowWorkspaceFacts(fact: Verification | null, now: number): boolean {
   return fact?.status === 'verified'
-    && fact.permission === 'read'
+    && (fact.permission === 'read' || fact.permission === 'manage')
     && fact.accessStatus === 'readable'
     && fact.completeness === 'complete'
     && fact.expiresAt !== undefined
